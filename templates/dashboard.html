@@ -1,0 +1,206 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="flex flex-col items-center">
+  <h2 class="text-lg font-semibold mt-4">WBGT Tracker</h2>
+
+  <!-- Circular Progress Ring with Numeric Timer -->
+  <div class="relative w-48 h-48 my-4">
+    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="45" stroke="#e5e7eb" stroke-width="10" fill="none" />
+      <circle id="progress-ring" cx="50" cy="50" r="45" stroke="#10b981" stroke-width="10" fill="none"
+              stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" />
+    </svg>
+    <div class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-700" id="countdown">
+      --:--
+    </div>
+  </div>
+
+  <!-- Active Zone Display -->
+  <p class="mt-2 font-medium" id="zone_display">
+    {% if user.zone %}{{ user.zone.title() }} Zone{% else %}No zone selected{% endif %}
+  </p>
+
+  <!-- Action Buttons -->
+  <div class="mt-4 flex space-x-4">
+    <button onclick="undo()" class="p-3 rounded-full bg-gray-300 text-white hover:bg-gray-400">⏮️</button>
+    <button onclick="startZone()" class="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600">▶️</button>
+    <button onclick="startRestCycle()" class="p-3 rounded-full bg-green-500 text-white hover:bg-green-600">☕</button>
+  </div>
+
+  <!-- WBGT Zone Selector -->
+  <h3 class="mt-6 font-semibold text-lg">Select Zone</h3>
+  <p class="text-sm mb-3">Tap a zone below and press ▶️ to start work cycle.</p>
+
+  <div class="space-y-2 w-full max-w-xs" id="zone_list">
+    {% for key, zone in zones.items() %}
+      {% if key != 'cutoff' or user.role in ['admin', 'supervisor'] %}
+      <div class="cursor-pointer p-4 rounded shadow 
+        {% if key == 'white' %}bg-white{% elif key == 'green' %}bg-green-400 text-white
+        {% elif key == 'yellow' %}bg-yellow-300
+        {% elif key == 'red' %}bg-red-400 text-white
+        {% elif key == 'black' %}bg-black text-white
+        {% elif key == 'cutoff' %}bg-red-900 text-white{% endif %}"
+        onclick="selectZone('{{ key }}')">
+        <strong>{{ key.title() }} Zone</strong><br>
+        <span class="text-sm">{{ zone.work }}:{{ zone.rest }} cycle<br>{{ zone.min }}°C - {{ zone.max }}°C</span>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+let selectedZone = null;
+let username = "{{ username }}";
+let userRole = "{{ user.role }}";
+let userZone = "{{ user.zone }}";
+let userStatus = "{{ user.status }}";
+let timerInterval = null;
+
+// === COUNTDOWN + RING ===
+function startCountdown(endTime, onComplete) {
+  clearInterval(timerInterval);
+  const totalSeconds = Math.floor((endTime - new Date()) / 1000);
+  const progress = document.getElementById("progress-ring");
+  const radius = 45;
+  const circumference = 2 * Math.PI * radius;
+
+  localStorage.setItem("end_time_" + username, endTime.toISOString());
+  progress.style.strokeDasharray = circumference;
+  progress.style.strokeDashoffset = circumference;
+
+  timerInterval = setInterval(() => {
+    const now = new Date();
+    const diff = Math.floor((endTime - now) / 1000);
+    const mins = Math.floor(diff / 60);
+    const secs = diff % 60;
+
+    document.getElementById("countdown").textContent =
+      (mins >= 0 ? mins : 0).toString().padStart(2, '0') + ":" +
+      (secs >= 0 ? secs : 0).toString().padStart(2, '0');
+
+    const percent = diff / totalSeconds;
+    progress.style.strokeDashoffset = circumference * percent;
+
+    if (diff <= 0) {
+      clearInterval(timerInterval);
+      localStorage.removeItem("end_time_" + username);
+      document.getElementById("progress-ring").style.strokeDashoffset = 0;
+      onComplete();
+    }
+  }, 1000);
+}
+
+// === REST HANDLING ===
+function promptRest() {
+  alert("Work cycle ended. Please press ☕ to begin your rest cycle.");
+  setTimeout(() => {
+    alarmLoop();
+  }, 180000);
+}
+
+function alarmLoop() {
+  if (!localStorage.getItem("rest_started_" + username)) {
+    playAlarm();
+    setTimeout(alarmLoop, 10000);
+  }
+}
+
+function startRestCycle() {
+  if (!userZone) {
+    alert("No previous work zone found.");
+    return;
+  }
+  const restDurations = {
+    white: 15, green: 15, yellow: 15, red: 30, black: 30, cutoff: 60
+  };
+  const restMins = restDurations[userZone.toLowerCase()];
+  const now = new Date();
+  const restEnd = new Date(now.getTime() + restMins * 60000);
+  localStorage.setItem("rest_started_" + username, "true");
+  alert("Rest started.");
+  startCountdown(restEnd, () => {
+    alert("Rest cycle complete. You are now idle.");
+    localStorage.removeItem("rest_started_" + username);
+    document.getElementById("zone_display").textContent = "Idle. Please select a new zone.";
+    document.getElementById("countdown").textContent = "--:--";
+  });
+}
+
+function playAlarm() {
+  const sound = new Audio("/static/beep.mp3");
+  sound.play();
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+}
+
+// === ZONE SELECT + ACTIONS ===
+function selectZone(zone) {
+  selectedZone = zone;
+  document.getElementById("zone_display").textContent = `${zone.charAt(0).toUpperCase() + zone.slice(1)} Zone selected. Tap ▶️ to start.`;
+}
+
+function startZone() {
+  if (!selectedZone) return alert("Please select a zone first.");
+  fetch("/submit_zone", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: username,
+      zone: selectedZone,
+      role: userRole
+    })
+  }).then(res => res.json())
+    .then(data => {
+      alert(data.message);
+      localStorage.removeItem("rest_started_" + username);
+      location.reload();
+    });
+}
+
+function undo() {
+  fetch("/undo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: username })
+  }).then(res => res.json())
+    .then(data => {
+      if (data.message) {
+        alert(data.message);
+        localStorage.removeItem("end_time_" + username);
+        location.reload();
+      } else {
+        alert(data.error);
+      }
+    });
+}
+
+// === AUTO START ON LOAD ===
+window.onload = () => {
+  const endTimeStr = "{{ user.end_time }}";
+  const parts = endTimeStr.split(":");
+  const end = new Date();
+  end.setHours(parts[0]);
+  end.setMinutes(parts[1]);
+  end.setSeconds(parts[2]);
+
+  if (userStatus === 'working') {
+    startCountdown(end, promptRest);
+  } else if (userStatus === 'resting') {
+    startCountdown(end, () => {
+      alert("Rest cycle complete. You are now idle.");
+      localStorage.removeItem("rest_started_" + username);
+      document.getElementById("zone_display").textContent = "Idle. Please select a new zone.";
+      document.getElementById("countdown").textContent = "--:--";
+    });
+  }
+};
+
+// === SOCKET.IO UPDATES ===
+const socket = io();
+socket.on("status_update", function(data) {
+  if (data.user !== username) {
+    console.log(`${data.user} changed to ${data.zone} zone`);
+  }
+});
+</script>
+{% endblock %}

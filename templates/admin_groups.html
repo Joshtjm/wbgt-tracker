@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="text-lg font-semibold mb-4 text-center">Admin: Group Management</h2>
+
+<!-- Create Group -->
+<form method="POST" action="/admin/groups" class="bg-white p-4 rounded shadow mb-6">
+  <h3 class="text-md font-semibold mb-2">Create Group</h3>
+  <div class="flex items-center space-x-2">
+    <input type="text" name="new_group" placeholder="Enter group name" required class="border rounded px-3 py-1 w-2/3">
+    <button type="submit" name="action" value="create" class="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-600">Create</button>
+  </div>
+</form>
+
+<!-- Assign User to Group -->
+<form method="POST" action="/admin/groups" class="bg-white p-4 rounded shadow mb-6">
+  <h3 class="text-md font-semibold mb-2">Assign User to Group</h3>
+  <div class="flex items-center space-x-2">
+    <input type="text" name="username" placeholder="Username" required class="border rounded px-3 py-1">
+    <input type="text" name="group" placeholder="Group" required class="border rounded px-3 py-1">
+    <button type="submit" name="action" value="assign" class="bg-green-500 text-white px-4 py-1 rounded hover:bg-green-600">Assign</button>
+  </div>
+</form>
+
+<!-- Display Users by Group -->
+<div class="bg-white p-4 rounded shadow">
+  <h3 class="text-md font-semibold mb-4">Users by Group</h3>
+  {% for group, members in grouped_users.items() %}
+  <div class="mb-4">
+    <h4 class="font-semibold text-blue-700">{{ group }}</h4>
+    <ul class="list-disc list-inside ml-4">
+      {% for user in members %}
+        <li>{{ user.username }} ({{ user.role }})</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="text-lg font-semibold text-center mb-4">WBGT History (All Users)</h2>
+
+<!-- Summary Placeholder -->
+<div class="text-center text-sm text-gray-500 mb-4">
+  Below is a historical log of WBGT zone entries. (To be expanded with CSV export / filters)
+</div>
+
+<table class="table-auto w-full text-sm bg-white shadow rounded border">
+  <thead class="bg-gray-100">
+    <tr>
+      <th class="p-2 border">Timestamp</th>
+      <th class="p-2 border">User</th>
+      <th class="p-2 border">Zone</th>
+      <th class="p-2 border">Duration</th>
+      <th class="p-2 border">Type</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if history %}
+      {% for entry in history %}
+      <tr>
+        <td class="p-2 border">{{ entry.timestamp }}</td>
+        <td class="p-2 border">{{ entry.username }}</td>
+        <td class="p-2 border">{{ entry.zone }}</td>
+        <td class="p-2 border">{{ entry.duration }} mins</td>
+        <td class="p-2 border">{{ entry.status }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="5" class="p-4 text-center text-gray-400">No history records yet.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}

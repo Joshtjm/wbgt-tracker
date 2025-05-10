@@ -1,0 +1,9 @@
+services:
+- type: web
+  name: wbgt-tracker
+  env: python
+  buildCommand: ""
+  startCommand: gunicorn main:app --worker-class eventlet -w 1 --bind 0.0.0.0:10000
+  envVars:
+    - key: PORT
+      value: 10000

@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="text-lg font-semibold text-center mb-4">Live WBGT Log</h2>
+
+<div class="text-sm text-center text-gray-500 mb-2">Real-time status of all active users</div>
+
+<table class="table-auto w-full border text-sm bg-white shadow rounded">
+  <thead class="bg-gray-100">
+    <tr>
+      <th class="p-2 border">User</th>
+      <th class="p-2 border">Zone</th>
+      <th class="p-2 border">Status</th>
+      <th class="p-2 border">Start</th>
+      <th class="p-2 border">End</th>
+      <th class="p-2 border">Time Left</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for user, info in users.items() %}
+    <tr>
+      <td class="p-2 border font-medium">{{ user }}</td>
+      <td class="p-2 border">{{ info['zone'].title() }}</td>
+      <td class="p-2 border">{{ info['status'] }}</td>
+      <td class="p-2 border">{{ info['start_time'] }}</td>
+      <td class="p-2 border">{{ info['end_time'] }}</td>
+      <td class="p-2 border">
+        {% if info['status'] != 'resting' %}
+          {{ (datetime.strptime(info['end_time'], '%H:%M:%S') - datetime.strptime(info['start_time'], '%H:%M:%S')).seconds // 60 }} min
+        {% else %}
+          Resting
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+const socket = io();
+socket.on("status_update", function(data) {
+  console.log("Live update received:", data);
+  location.reload(); // Auto-refresh on live update
+});
+</script>
+{% endblock %}

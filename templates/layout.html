@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WBGT Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#10b981">
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="icon" href="/static/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+  <!-- Header -->
+  <header class="bg-white shadow p-4 flex justify-between items-center">
+    <span class="text-xl font-semibold">WBGT Tracker</span>
+    <div class="flex items-center space-x-2">
+      {% if session.username %}
+      <span class="text-sm text-gray-600">Logged in as {{ session.username }} ({{ session.role }})</span>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- Page content -->
+  <main class="pt-6 pb-20 px-4">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="fixed bottom-0 left-0 w-full bg-white border-t p-2 flex justify-around text-sm">
+    <a href="/" class="text-blue-600 hover:font-semibold">🏠 Home</a>
+    <a href="/readings">📈 Readings</a>
+    <a href="/history">🕘 History</a>
+    <a href="/locations">📍 Locations</a>
+    <a href="/settings">⚙️ Settings</a>
+  </footer>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/static/service-worker.js')
+        .then(reg => console.log("✅ Service worker registered"))
+        .catch(err => console.error("⚠️ Service worker error:", err));
+    }
+  </script>
+</body>
+</html>

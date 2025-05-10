@@ -1,0 +1,62 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="max-w-md mx-auto p-4">
+  <h2 class="text-xl font-semibold mb-4 text-center">Select Location</h2>
+
+  <!-- Modal-like Input -->
+  <div class="bg-white p-4 rounded shadow mb-6">
+    <label class="block text-sm font-medium mb-2">Current Location</label>
+    <p class="text-xs text-gray-500 mb-2" id="gps_status">Location permission required</p>
+
+    <input type="text" id="location_name" placeholder="Enter location name" class="w-full border px-3 py-2 rounded mb-2" />
+    <button onclick="saveLocation()" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">
+      💾 Save
+    </button>
+  </div>
+
+  <!-- Saved Locations -->
+  <div class="bg-white p-4 rounded shadow">
+    <h3 class="font-semibold text-md mb-2">Saved Locations</h3>
+    <ul id="saved_locations" class="text-sm text-gray-700 space-y-1">
+      <li class="text-gray-400 italic">No saved locations yet. Save your current location above.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+let saved = [];
+
+function saveLocation() {
+  const name = document.getElementById("location_name").value;
+  if (!name) return alert("Please enter a location name.");
+  const lat = localStorage.getItem("gps_lat") || "Unknown";
+  const lon = localStorage.getItem("gps_lon") || "Unknown";
+  saved.push(`${name} (${lat}, ${lon})`);
+  renderList();
+  document.getElementById("location_name").value = "";
+}
+
+function renderList() {
+  const ul = document.getElementById("saved_locations");
+  ul.innerHTML = "";
+  saved.forEach(loc => {
+    const li = document.createElement("li");
+    li.textContent = loc;
+    ul.appendChild(li);
+  });
+}
+
+// Try to get GPS automatically
+navigator.geolocation.getCurrentPosition(
+  pos => {
+    localStorage.setItem("gps_lat", pos.coords.latitude);
+    localStorage.setItem("gps_lon", pos.coords.longitude);
+    document.getElementById("gps_status").textContent =
+      `Lat: ${pos.coords.latitude.toFixed(4)}, Lon: ${pos.coords.longitude.toFixed(4)}`;
+  },
+  err => {
+    document.getElementById("gps_status").textContent = "Unable to retrieve GPS automatically.";
+  }
+);
+</script>
+{% endblock %}
