@@ -30,7 +30,11 @@
 
   <!-- Zone Info -->
   <p class="mt-2 font-medium" id="zone_display">
-    {% if user.zone %}{{ user.zone.title() }} Zone{% else %}No zone selected{% endif %}
+    {% if user.zone %}
+      Currently in <span class="font-bold">{{ user.zone.title() }}</span> Zone
+    {% else %}
+      No zone selected
+    {% endif %}
   </p>
   <p class="text-sm mt-1 text-gray-600" id="timer_start_end">
     {% if user.status != 'idle' %}
@@ -100,7 +104,7 @@ function confirmOverwrite() {
 function selectZone(zone) {
   if (cutoffActive) return alert("Cannot select zones during active cutoff.");
   selectedZone = zone;
-  document.getElementById("zone_display").textContent = `${zone.charAt(0).toUpperCase() + zone.slice(1)} Zone selected. Tap ▶️ to start.`;
+  document.getElementById("zone_display").textContent = `Currently in ${zone.charAt(0).toUpperCase() + zone.slice(1)} Zone`;
 }
 
 function startZone() {
