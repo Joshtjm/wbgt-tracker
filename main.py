@@ -40,8 +40,7 @@ def calculate_end_time(start, minutes):
 def parse_time_string(time_str):
     try:
         naive = datetime.strptime(time_str, "%H:%M:%S")
-        now = sg_now()
-        return now.replace(hour=naive.hour, minute=naive.minute, second=naive.second, microsecond=0)
+        return SG_TZ.localize(naive)
     except Exception:
         return None
 
@@ -153,17 +152,18 @@ def submit_zone():
 
     store_state(username)
 
-    if user and user["status"] == "working":
-        if not overwrite_flags.get(username, False):
-            return jsonify({"error": "Overwrite not confirmed. Press 📝 before ▶️."})
-        # if overwrite is allowed, continue with overwrite logic
-        start_time_dt = sg_now()
-        end_time = calculate_end_time(start_time_dt, work_minutes)
-        start_time = start_time_dt.strftime("%H:%M:%S")
+    prev_end = parse_time_string(user.get("end_time")) if user else None
+    new_end = calculate_end_time(now, work_minutes)
+
+    if user["status"] == "working" and not overwrite_flags.get(username, False):
+        return jsonify({"error": "Overwrite not confirmed. Press 📝 before ▶️."})
+
+    if user["status"] == "working" and prev_end:
+        end_time = min(prev_end, new_end)
+        start_time = user["start_time"]
     else:
-        start_time_dt = sg_now()
-        end_time = calculate_end_time(start_time_dt, work_minutes)
-        start_time = start_time_dt.strftime("%H:%M:%S")
+        end_time = new_end
+        start_time = now.strftime("%H:%M:%S")
 
     users[username].update({
         "status": "working",
