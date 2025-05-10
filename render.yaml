@@ -1,9 +1,12 @@
 services:
-- type: web
-  name: wbgt-tracker
-  env: python
-  buildCommand: ""
-  startCommand: gunicorn main:app --worker-class eventlet -w 1 --bind 0.0.0.0:10000
-  envVars:
-    - key: PORT
-      value: 10000
+  - type: web
+    name: wbgt-tracker
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -w 1 -k gevent main:app"
+    envVars:
+      - key: SECRET_KEY
+        value: your-secret-key-goes-here
+    autoDeploy: true
+    plan: free
+    healthCheckPath: /
