@@ -16,33 +16,32 @@
   </div>
   {% endif %}
 
-  <!-- Circular Progress Ring with Numeric Timer -->
+  <!-- Progress Ring -->
   <div class="relative w-48 h-48 my-4">
     <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r="45" stroke="#e5e7eb" stroke-width="10" fill="none" />
       <circle id="progress-ring" cx="50" cy="50" r="45" stroke="#10b981" stroke-width="10" fill="none"
         stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" />
     </svg>
-    <div class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-700" id="countdown">
-      --:--
-    </div>
+    <div class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-700" id="countdown">--:--</div>
   </div>
 
   <!-- Zone Info -->
   <p class="mt-2 font-medium" id="zone_display">
-    {% if user.zone %}
-      Currently in <span class="font-bold">{{ user.zone.title() }}</span> Zone
-    {% else %}
-      No zone selected
-    {% endif %}
-  </p>
-  <p class="text-sm mt-1 text-gray-600" id="timer_start_end">
     {% if user.status != 'idle' %}
-    Start: {{ user.start_time }} · End: {{ user.end_time }}
+      🟢 Currently in <strong>{{ user.zone.title() }}</strong> zone
+    {% else %}
+      No active zone selected
     {% endif %}
   </p>
 
-  <!-- Buttons -->
+  <p class="text-sm mt-1 text-gray-600" id="timer_start_end">
+    {% if user.status != 'idle' %}
+      Start: {{ user.start_time }} · End: {{ user.end_time }}
+    {% endif %}
+  </p>
+
+  <!-- Action Buttons -->
   <div class="mt-4 flex space-x-4">
     <button onclick="undo()" class="p-3 rounded-full bg-gray-300 text-white hover:bg-gray-400">⏮️</button>
     <button onclick="confirmOverwrite()" class="p-3 rounded-full bg-yellow-500 text-white hover:bg-yellow-600">📝</button>
@@ -53,6 +52,7 @@
   <!-- Zone Selector -->
   <h3 class="mt-6 font-semibold text-lg">Select Zone</h3>
   <p class="text-sm mb-3">Tap a zone below and press ▶️ to start.</p>
+
   <div class="space-y-2 w-full max-w-xs" id="zone_list">
     {% for key, zone in zones.items() %}
     {% if key != 'cutoff' or user.role in ['admin', 'supervisor'] %}
@@ -80,27 +80,6 @@ let userStatus = "{{ user.status }}";
 let cutoffActive = {{ 'true' if user.cutoff_active else 'false' }};
 let timerInterval = null;
 
-function disableCutoff() {
-  fetch("/deactivate_cutoff", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, role: userRole })
-  }).then(res => res.json()).then(data => {
-    alert(data.message);
-    location.reload();
-  });
-}
-
-function confirmOverwrite() {
-  fetch("/confirm_overwrite", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username })
-  }).then(res => res.json()).then(data => {
-    alert(data.message);
-  });
-}
-
 function selectZone(zone) {
   if (cutoffActive) return alert("Cannot select zones during active cutoff.");
   selectedZone = zone;
@@ -118,28 +97,18 @@ function startZone() {
     if (data.error) alert(data.error);
     else {
       alert(data.message);
-      userZone = selectedZone;  // 🔁 update only AFTER success
-      document.getElementById("zone_display").textContent = `🟢 Currently in ${userZone.charAt(0).toUpperCase() + userZone.slice(1)} zone.`;
-      localStorage.removeItem("rest_started_" + username);
-      location.reload();  // reload to reflect changes across UI
+      location.reload();
     }
   });
 }
 
-
-function undo() {
-  fetch("/undo", {
+function confirmOverwrite() {
+  fetch("/confirm_overwrite", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username })
   }).then(res => res.json()).then(data => {
-    if (data.message) {
-      alert(data.message);
-      localStorage.removeItem("end_time_" + username);
-      location.reload();
-    } else {
-      alert(data.error);
-    }
+    alert(data.message);
   });
 }
 
@@ -161,16 +130,14 @@ function startCountdown(endTime, onComplete) {
     const secs = diff % 60;
 
     document.getElementById("countdown").textContent =
-      (mins >= 0 ? mins : 0).toString().padStart(2, '0') + ":" +
-      (secs >= 0 ? secs : 0).toString().padStart(2, '0');
+      `${Math.max(mins, 0).toString().padStart(2, '0')}:${Math.max(secs, 0).toString().padStart(2, '0')}`;
 
-    const percent = diff / totalSeconds;
-    progress.style.strokeDashoffset = circumference * percent;
+    progress.style.strokeDashoffset = circumference * (diff / totalSeconds);
 
     if (diff <= 0) {
       clearInterval(timerInterval);
-      localStorage.removeItem("end_time_" + username);
       document.getElementById("progress-ring").style.strokeDashoffset = 0;
+      localStorage.removeItem("end_time_" + username);
       onComplete();
     }
   }, 1000);
@@ -210,16 +177,27 @@ function startRestCycle() {
   });
 }
 
+function undo() {
+  fetch("/undo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username })
+  }).then(res => res.json()).then(data => {
+    alert(data.message || data.error);
+    localStorage.removeItem("end_time_" + username);
+    location.reload();
+  });
+}
+
 window.onload = () => {
   const endTimeStr = "{{ user.end_time }}";
-  if (endTimeStr !== '--:--') {
+  if (endTimeStr && endTimeStr !== "--:--") {
     const parts = endTimeStr.split(":"), end = new Date();
     end.setHours(parts[0]); end.setMinutes(parts[1]); end.setSeconds(parts[2]);
 
     if (userStatus === 'working') startCountdown(end, promptRest);
     else if (userStatus === 'resting') startCountdown(end, () => {
       alert("Rest cycle complete. You are now idle.");
-      localStorage.removeItem("rest_started_" + username);
       document.getElementById("zone_display").textContent = "Idle. Please select a new zone.";
       document.getElementById("countdown").textContent = "--:--";
     });
