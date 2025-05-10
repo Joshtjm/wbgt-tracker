@@ -104,7 +104,8 @@ function confirmOverwrite() {
 function selectZone(zone) {
   if (cutoffActive) return alert("Cannot select zones during active cutoff.");
   selectedZone = zone;
-  document.getElementById("zone_display").textContent = `Currently in ${zone.charAt(0).toUpperCase() + zone.slice(1)} Zone`;
+  document.getElementById("zone_display").textContent =
+    `✅ ${zone.charAt(0).toUpperCase() + zone.slice(1)} zone selected. Tap ▶️ to start.`;
 }
 
 function startZone() {
@@ -117,11 +118,14 @@ function startZone() {
     if (data.error) alert(data.error);
     else {
       alert(data.message);
+      userZone = selectedZone;  // 🔁 update only AFTER success
+      document.getElementById("zone_display").textContent = `🟢 Currently in ${userZone.charAt(0).toUpperCase() + userZone.slice(1)} zone.`;
       localStorage.removeItem("rest_started_" + username);
-      location.reload();
+      location.reload();  // reload to reflect changes across UI
     }
   });
 }
+
 
 function undo() {
   fetch("/undo", {

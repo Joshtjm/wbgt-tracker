@@ -39,7 +39,8 @@ def calculate_end_time(start, minutes):
 
 def parse_time_string(time_str):
     try:
-        return datetime.strptime(time_str, "%H:%M:%S")
+        naive = datetime.strptime(time_str, "%H:%M:%S")
+        return SG_TZ.localize(naive)
     except Exception:
         return None
 
