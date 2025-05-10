@@ -1,42 +1,36 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="max-w-3xl mx-auto">
-  <div class="flex justify-between items-center my-4">
-    <h2 class="text-xl font-semibold">📊 Live WBGT Status</h2>
-    <button onclick="location.reload()" class="text-sm px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">🔁 Refresh</button>
+<div class="p-6">
+  <h2 class="text-xl font-semibold mb-4">📊 Live WBGT Status</h2>
+  <div class="overflow-x-auto">
+    <table class="min-w-full table-auto border border-gray-300 text-sm">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="border px-4 py-2 text-left">Username</th>
+          <th class="border px-4 py-2 text-left">Group</th>
+          <th class="border px-4 py-2 text-left">Role</th>
+          <th class="border px-4 py-2 text-left">Status</th>
+          <th class="border px-4 py-2 text-left">Zone</th>
+          <th class="border px-4 py-2 text-left">Start Time</th>
+          <th class="border px-4 py-2 text-left">End Time</th>
+          <th class="border px-4 py-2 text-left">Cutoff?</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for username, info in users.items() %}
+        <tr class="hover:bg-gray-50">
+          <td class="border px-4 py-2">{{ username }}</td>
+          <td class="border px-4 py-2">{{ info.group }}</td>
+          <td class="border px-4 py-2">{{ info.role }}</td>
+          <td class="border px-4 py-2 capitalize">{{ info.status }}</td>
+          <td class="border px-4 py-2 capitalize">{{ info.zone or "—" }}</td>
+          <td class="border px-4 py-2">{{ info.start_time }}</td>
+          <td class="border px-4 py-2">{{ info.end_time }}</td>
+          <td class="border px-4 py-2">{{ "✅" if info.cutoff_active else "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-  <table class="w-full text-sm table-auto border">
-    <thead>
-      <tr class="bg-gray-200">
-        <th class="border px-2 py-1">User</th>
-        <th class="border px-2 py-1">Zone</th>
-        <th class="border px-2 py-1">Status</th>
-        <th class="border px-2 py-1">Start</th>
-        <th class="border px-2 py-1">End</th>
-        <th class="border px-2 py-1">Time Left</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for uname, info in users.items() %}
-      <tr class="text-center">
-        <td class="border px-2 py-1 font-medium">{{ uname }}</td>
-        <td class="border px-2 py-1">{{ info.zone.title() if info.zone else "-" }}</td>
-        <td class="border px-2 py-1">{{ info.status }}</td>
-        <td class="border px-2 py-1">{{ info.start_time }}</td>
-        <td class="border px-2 py-1">{{ info.end_time }}</td>
-        <td class="border px-2 py-1">
-          {% set now = namespace() %}
-          {% set now.val = cycler() %}
-          {% set end = info.end_time.split(":") %}
-          {% set current = namespace(hour=now().hour, minute=now().minute, second=now().second) %}
-          {% set end_hour = end[0]|int %}
-          {% set end_min = end[1]|int %}
-          {% set left_minutes = (end_hour*60 + end_min) - (current.hour*60 + current.minute) %}
-          {% if left_minutes >= 0 %}{{ left_minutes }} min{% else %}Ended{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </div>
 {% endblock %}

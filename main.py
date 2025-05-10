@@ -1,15 +1,17 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, session, jsonify
 from flask_socketio import SocketIO
 from tinydb import TinyDB, Query
 from datetime import datetime, timedelta
 import threading
 import pytz
-import os
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "fallback-secret-key")
-app.permanent_session_lifetime = timedelta(days=30)
-socketio = SocketIO(app, async_mode='threading')
+app.secret_key = 'secret_key'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+socketio = SocketIO(app, async_mode='eventlet')
 
 SG_TZ = pytz.timezone("Asia/Singapore")
 db = TinyDB("data.json")
@@ -29,12 +31,17 @@ users = {}
 undo_stack = {}
 overwrite_flags = {}
 
-# === Helper Functions ===
 def sg_now():
     return datetime.now(SG_TZ)
 
 def calculate_end_time(start, minutes):
     return start + timedelta(minutes=minutes)
+
+def parse_time_string(time_str):
+    try:
+        return datetime.strptime(time_str, "%H:%M:%S")
+    except Exception:
+        return None
 
 def trigger_alarm(username):
     def alarm_loop():
@@ -49,11 +56,9 @@ def store_state(username):
             undo_stack[username] = []
         undo_stack[username].append(users[username].copy())
 
-# === Routes ===
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        session.permanent = True
         username = request.form.get("username")
         role = request.form.get("role")
         group = request.form.get("group") or "default"
@@ -61,6 +66,7 @@ def login():
         session["username"] = username
         session["role"] = role
         session["group"] = group
+        session.permanent = True
 
         user_table.upsert({
             "username": username,
@@ -146,10 +152,14 @@ def submit_zone():
     store_state(username)
 
     if user and user["status"] == "working":
-        prev_end = datetime.strptime(user["end_time"], "%H:%M:%S")
+        prev_end = parse_time_string(user.get("end_time"))
         new_end = calculate_end_time(now, work_minutes)
-        end_time = min(prev_end, new_end)
-        start_time = user["start_time"]
+        if prev_end:
+            end_time = min(prev_end, new_end)
+            start_time = user["start_time"]
+        else:
+            end_time = new_end
+            start_time = now.strftime("%H:%M:%S")
     else:
         end_time = calculate_end_time(now, work_minutes)
         start_time = now.strftime("%H:%M:%S")

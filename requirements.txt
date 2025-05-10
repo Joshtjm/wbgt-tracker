@@ -4,3 +4,4 @@ eventlet
 tinydb
 pytz
 gunicorn
+eventlet>=0.33.0

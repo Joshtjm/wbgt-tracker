@@ -202,7 +202,6 @@ function startRestCycle() {
   });
 }
 
-// Auto load countdown if session active
 window.onload = () => {
   const endTimeStr = "{{ user.end_time }}";
   if (endTimeStr !== '--:--') {
@@ -219,7 +218,6 @@ window.onload = () => {
   }
 };
 
-// Real-time updates
 const socket = io();
 socket.on("status_update", function(data) {
   if (data.user !== username) {
