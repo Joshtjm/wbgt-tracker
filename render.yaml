@@ -3,7 +3,7 @@ services:
     name: wbgt-tracker
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -w 1 -k gevent main:app"
+    startCommand: "python main.py"
     envVars:
       - key: SECRET_KEY
         value: your-secret-key-goes-here
