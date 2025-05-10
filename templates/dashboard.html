@@ -6,9 +6,7 @@
   {% if user.cutoff_active and user.role in ['admin', 'supervisor'] %}
   <div class="my-3 p-3 bg-red-200 text-red-800 rounded">
     🚫 Cutoff is ACTIVE. You may disable it below.
-    <button onclick="disableCutoff()" class="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">
-      Disable Cutoff
-    </button>
+    <button onclick="disableCutoff()" class="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">Disable Cutoff</button>
   </div>
   {% elif user.cutoff_active %}
   <div class="my-3 p-3 bg-red-100 text-red-700 rounded">
@@ -21,17 +19,17 @@
     <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r="45" stroke="#e5e7eb" stroke-width="10" fill="none" />
       <circle id="progress-ring" cx="50" cy="50" r="45" stroke="#10b981" stroke-width="10" fill="none"
-        stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" />
+              stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" />
     </svg>
     <div class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-700" id="countdown">--:--</div>
   </div>
 
   <!-- Zone Info -->
-  <p class="mt-2 font-medium" id="zone_display">
+  <p class="mt-2 font-medium text-center" id="zone_display">
     {% if user.status != 'idle' %}
-      🟢 Currently in <strong>{{ user.zone.title() }}</strong> zone
+      🟢 Currently in <strong>{{ user.zone.title() }}</strong> zone.
     {% else %}
-      No active zone selected
+      Please select a WBGT zone to begin.
     {% endif %}
   </p>
 
@@ -83,8 +81,12 @@ let timerInterval = null;
 function selectZone(zone) {
   if (cutoffActive) return alert("Cannot select zones during active cutoff.");
   selectedZone = zone;
-  document.getElementById("zone_display").textContent =
-    `✅ ${zone.charAt(0).toUpperCase() + zone.slice(1)} zone selected. Tap ▶️ to start.`;
+
+  const currentDisplay = userStatus !== "idle" && userZone
+    ? `🟢 Currently in <strong>${userZone.charAt(0).toUpperCase() + userZone.slice(1)}</strong> zone.<br>`
+    : '';
+  const selectedDisplay = `✅ <span class="text-sm">${zone.charAt(0).toUpperCase() + zone.slice(1)} zone selected. Tap ▶️ to start.</span>`;
+  document.getElementById("zone_display").innerHTML = currentDisplay + selectedDisplay;
 }
 
 function startZone() {
@@ -97,6 +99,7 @@ function startZone() {
     if (data.error) alert(data.error);
     else {
       alert(data.message);
+      localStorage.removeItem("rest_started_" + username);
       location.reload();
     }
   });
