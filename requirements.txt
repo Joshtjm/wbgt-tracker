@@ -1,7 +1,6 @@
-flask
-flask-socketio
-eventlet
-tinydb
-pytz
-gunicorn
-eventlet>=0.33.0
+flask==2.3.3
+flask-socketio==5.3.4
+eventlet==0.33.3
+tinydb==4.8.0
+pytz==2024.1
+gunicorn==21.2.0
