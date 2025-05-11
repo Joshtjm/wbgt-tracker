@@ -1,9 +1,8 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, render_template, request, redirect, session, jsonify
+from flask import Flask, render_template, request, redirect, session
 from flask_socketio import SocketIO
-from tinydb import TinyDB, Query
 from datetime import datetime, timedelta
 import pytz
 
@@ -12,15 +11,16 @@ app.secret_key = 'secret_key'
 socketio = SocketIO(app, async_mode='eventlet')
 
 SG_TZ = pytz.timezone("Asia/Singapore")
-db = TinyDB("data.json")
-users = {}
+
 WBGT_ZONES = {
     "white": {"work": 60, "rest": 15},
     "green": {"work": 45, "rest": 15},
     "yellow": {"work": 30, "rest": 15},
     "red": {"work": 30, "rest": 30},
-    "black": {"work": 15, "rest": 30},
+    "black": {"work": 15, "rest": 30}
 }
+
+users = {}
 
 def sg_now():
     return datetime.now(SG_TZ)
@@ -43,7 +43,9 @@ def index():
         proposed_end = calculate_end(now, work_duration)
 
         if user["status"] == "working":
-            current_end = datetime.strptime(user["end_time"], "%H:%M:%S")
+            current_end_str = user["end_time"]
+            current_end_naive = datetime.strptime(current_end_str, "%H:%M:%S")
+            current_end = now.replace(hour=current_end_naive.hour, minute=current_end_naive.minute, second=current_end_naive.second)
             proposed_end = min(current_end, proposed_end)
 
         users[username] = {
@@ -53,7 +55,7 @@ def index():
             "end_time": proposed_end.strftime("%H:%M:%S")
         }
         return redirect(f"/dashboard/{username}")
-    return render_template("index.html")
+    return render_template("index.html", zones=WBGT_ZONES)
 
 @app.route("/dashboard/<username>")
 def dashboard(username):

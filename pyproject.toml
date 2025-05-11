@@ -11,6 +11,8 @@ gunicorn = "^21.2.0"
 pytz = "^2025.2"
 flask-socketio = "^5.5.1"
 tinydb = "^4.8.2"
+eventlet = "^0.39.1"
+gevent = "^25.4.2"
 
 [tool.pyright]
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md

@@ -1,82 +1,94 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="flex flex-col items-center">
-  <h2 class="text-xl font-semibold mt-4">WBGT Tracker</h2>
+<div class="flex flex-col items-center p-4">
 
-  <!-- Countdown Ring -->
-  <div class="relative w-48 h-48 my-4">
-    <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+  <!-- Header -->
+  <h2 class="text-xl font-bold mb-4">WBGT Tracker</h2>
+
+  <!-- Timer Circle -->
+  <div class="relative w-48 h-48">
+    <svg class="absolute top-0 left-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r="45" stroke="#e5e7eb" stroke-width="10" fill="none" />
       <circle id="progress-ring" cx="50" cy="50" r="45" stroke="#10b981" stroke-width="10" fill="none"
-              stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" />
+        stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" />
     </svg>
-    <div class="absolute inset-0 flex items-center justify-center text-3xl font-bold text-gray-700" id="countdown">--:--</div>
+    <div class="absolute inset-0 flex flex-col items-center justify-center">
+      <div id="countdown" class="text-3xl font-bold text-gray-700">--:--</div>
+      <div class="text-sm mt-1 text-gray-600" id="zone_name_display">Zone: {{ user.zone.title() }}</div>
+    </div>
   </div>
 
-  <!-- Zone Info -->
-  <p class="mt-2 font-medium text-center" id="zone_display">
-    {% if user.status == 'working' %}
-      🟢 Currently in <strong>{{ user.zone.title() }}</strong> zone
-    {% else %}
-      Please select a WBGT zone below
-    {% endif %}
-  </p>
-  <p class="text-sm mt-1 text-gray-600">
-    {% if user.status == 'working' %}
-      Start: {{ user.start_time }} · End: {{ user.end_time }}
-    {% endif %}
-  </p>
+  <!-- Start & End Time -->
+  <div class="mt-3 text-sm text-gray-600">
+    Start: {{ user.start_time }} · End: {{ user.end_time }}
+  </div>
 
-  <!-- Zone Selector -->
-  <form method="POST" action="/">
+  <!-- WBGT Zone Selector -->
+  <h3 class="mt-6 text-lg font-semibold">WBGT Zones</h3>
+  <p class="text-sm text-gray-500 mb-3">Select a zone to start the work/rest cycle.</p>
+
+  <form action="/" method="POST" class="w-full max-w-xs space-y-2">
     <input type="hidden" name="username" value="{{ username }}">
-    <div class="mt-6 space-y-2 w-full max-w-xs">
-      {% for key, z in zones.items() %}
-      <button name="zone" value="{{ key }}" type="submit"
-        class="w-full p-4 rounded text-white shadow
-        {% if key == 'white' %}bg-white text-black border border-gray-300{% endif %}
-        {% if key == 'green' %}bg-green-500{% endif %}
-        {% if key == 'yellow' %}bg-yellow-400{% endif %}
-        {% if key == 'red' %}bg-red-500{% endif %}
-        {% if key == 'black' %}bg-black{% endif %}">
-        <strong>{{ key.title() }} Zone</strong><br>
-        <span class="text-sm">Work: {{ z.work }}m · Rest: {{ z.rest }}m</span>
-      </button>
-      {% endfor %}
-    </div>
+    {% for key, z in zones.items() %}
+    <button name="zone" value="{{ key }}" class="w-full p-4 rounded shadow text-left
+      {% if key == 'white' %}bg-white text-black
+      {% elif key == 'green' %}bg-green-400 text-white
+      {% elif key == 'yellow' %}bg-yellow-300 text-black
+      {% elif key == 'red' %}bg-red-400 text-white
+      {% elif key == 'black' %}bg-black text-white
+      {% endif %}
+      hover:scale-[1.02] transition">
+      <div class="font-bold text-lg">{{ key.title() }} Zone</div>
+      <div class="text-sm">
+        Work: {{ z.work }} mins · Rest: {{ z.rest }} mins<br>
+        {% if z.min and z.max %}
+        Temp: {{ "%.1f"|format(z.min) }}°C – {{ "%.1f"|format(z.max) }}°C
+        {% elif z.min %}
+        Temp: {{ "%.1f"|format(z.min) }}°C and above
+        {% else %}
+        Temp: N/A
+        {% endif %}
+      </div>
+    </button>
+    {% endfor %}
   </form>
 </div>
 
+<!-- Countdown Script -->
 <script>
-let endTimeStr = "{{ user.end_time }}";
-let userStatus = "{{ user.status }}";
-if (userStatus === 'working' && endTimeStr !== "--:--") {
-  const [h, m, s] = endTimeStr.split(":").map(Number);
-  const now = new Date();
-  const end = new Date();
-  end.setHours(h, m, s);
-  
-  if (end > now) {
-    const total = Math.floor((end - now) / 1000);
-    const ring = document.getElementById("progress-ring");
-    const count = document.getElementById("countdown");
-    const circ = 2 * Math.PI * 45;
-    ring.style.strokeDasharray = circ;
+  const endTimeStr = "{{ user.end_time }}";
+  const status = "{{ user.status }}";
 
-    let remaining = total;
+  if (endTimeStr && status === "working") {
+    const endParts = endTimeStr.split(":");
+    const end = new Date();
+    end.setHours(parseInt(endParts[0]));
+    end.setMinutes(parseInt(endParts[1]));
+    end.setSeconds(parseInt(endParts[2]));
+
+    const totalSeconds = Math.floor((end - new Date()) / 1000);
+    const progress = document.getElementById("progress-ring");
+    const radius = 45;
+    const circumference = 2 * Math.PI * radius;
+    progress.style.strokeDasharray = circumference;
+
     const interval = setInterval(() => {
-      let mins = Math.floor(remaining / 60);
-      let secs = remaining % 60;
-      count.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-      ring.style.strokeDashoffset = circ * (remaining / total);
+      const now = new Date();
+      const diff = Math.floor((end - now) / 1000);
+      const mins = Math.floor(diff / 60);
+      const secs = diff % 60;
 
-      if (--remaining < 0) {
+      document.getElementById("countdown").textContent =
+        `${String(Math.max(mins, 0)).padStart(2, '0')}:${String(Math.max(secs, 0)).padStart(2, '0')}`;
+
+      progress.style.strokeDashoffset = circumference * (1 - diff / totalSeconds);
+
+      if (diff <= 0) {
         clearInterval(interval);
-        count.textContent = "--:--";
-        ring.style.strokeDashoffset = 0;
+        progress.style.strokeDashoffset = circumference;
+        document.getElementById("countdown").textContent = "--:--";
       }
     }, 1000);
   }
-}
 </script>
 {% endblock %}
