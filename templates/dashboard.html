@@ -21,10 +21,10 @@
   </div>
 
   <!-- Location Section -->
-  <div class="mt-4 w-full max-w-md">
+  <div class="absolute top-4 right-4 w-64">
     <div class="flex space-x-2 mb-4">
       <input type="text" id="location_name" placeholder="Location name" class="flex-1 p-2 border rounded">
-      <button onclick="saveCurrentLocation()" class="bg-blue-500 text-white px-4 py-2 rounded">Save Location</button>
+      <button onclick="saveCurrentLocation()" class="bg-blue-500 text-white px-4 py-2 rounded">Save</button>
     </div>
     <select id="saved_locations" class="w-full p-2 border rounded mb-4">
       <option value="">Select saved location</option>
@@ -100,7 +100,9 @@ function startZone(zone) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `username={{ username }}&zone=${zone}&location=${location}`
-  }).then(() => location.reload());
+  }).then(() => {
+    window.location.href = window.location.href;
+  });
 }
 
 if (navigator.geolocation) {

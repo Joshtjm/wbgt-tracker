@@ -5,6 +5,32 @@
   <h2 class="text-xl font-bold mb-4">WBGT Status Monitor</h2>
   <div class="text-sm text-gray-600 mb-4">Logged in as: {{ username }} ({{ role }})</div>
 
+  <!-- WBGT Zone Control -->
+  <div class="mb-6 w-full max-w-4xl">
+    <div class="bg-white p-4 rounded shadow">
+      <h3 class="font-bold mb-2">Modify WBGT Zones</h3>
+      <div class="flex space-x-4 mb-4">
+        <select id="userSelect" multiple class="flex-1 p-2 border rounded" size="4">
+          {% for user_id, user_data in users.items() %}
+            {% if user_data.get('role') == 'Trainer' %}
+              <option value="{{ user_id }}">{{ user_id }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <select id="zoneSelect" class="flex-1 p-2 border rounded">
+          <option value="">Select Zone</option>
+          {% for zone in zones %}
+            <option value="{{ zone }}">{{ zone|title }}</option>
+          {% endfor %}
+        </select>
+        <button onclick="updateSelectedUsers()" class="bg-blue-500 text-white px-6 py-2 rounded">
+          Apply Zone
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Users Table -->
   <div class="w-full max-w-4xl">
     <div class="bg-white shadow rounded-lg overflow-hidden">
       <table class="min-w-full">
@@ -17,7 +43,6 @@
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start Time</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Time</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -28,31 +53,19 @@
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user_data.role }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user_data.status|title }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {% if user_data.zone %}
-                    <span class="px-2 py-1 rounded
-                      {% if user_data.zone == 'white' %}bg-white border border-gray-300 text-black
-                      {% elif user_data.zone == 'green' %}bg-green-400 text-white
-                      {% elif user_data.zone == 'yellow' %}bg-yellow-300 text-black
-                      {% elif user_data.zone == 'red' %}bg-red-400 text-white
-                      {% elif user_data.zone == 'black' %}bg-black text-white
-                      {% endif %}">
-                      {{ user_data.zone|title }}
-                    </span>
-                  {% else %}
-                    -
-                  {% endif %}
+                  <span class="px-2 py-1 rounded
+                    {% if user_data.zone == 'white' %}bg-white border border-gray-300 text-black
+                    {% elif user_data.zone == 'green' %}bg-green-400 text-white
+                    {% elif user_data.zone == 'yellow' %}bg-yellow-300 text-black
+                    {% elif user_data.zone == 'red' %}bg-red-400 text-white
+                    {% elif user_data.zone == 'black' %}bg-black text-white
+                    {% endif %}">
+                    {{ user_data.zone|title if user_data.zone else '-' }}
+                  </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user_data.get('start_time', '-') }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user_data.get('end_time', '-') }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user_data.get('location', '-') }}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <select onchange="updateZone('{{ user_id }}', this.value)" class="p-1 border rounded">
-                    <option value="">Set WBGT Zone</option>
-                    {% for zone in zones %}
-                    <option value="{{ zone }}">{{ zone|title }}</option>
-                    {% endfor %}
-                  </select>
-                </td>
               </tr>
             {% endif %}
           {% endfor %}
@@ -63,14 +76,23 @@
 </div>
 
 <script>
-function updateZone(targetUser, zone) {
-  if (!zone) return;
+function updateSelectedUsers() {
+  const selectedUsers = Array.from(document.getElementById('userSelect').selectedOptions).map(opt => opt.value);
+  const zone = document.getElementById('zoneSelect').value;
   
-  fetch('/set_zone', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `username={{ username }}&target_user=${targetUser}&zone=${zone}`
-  }).then(() => location.reload());
+  if (!zone || selectedUsers.length === 0) return;
+  
+  const updatePromises = selectedUsers.map(user => 
+    fetch('/set_zone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `username={{ username }}&target_user=${user}&zone=${zone}`
+    })
+  );
+  
+  Promise.all(updatePromises).then(() => {
+    window.location.href = window.location.href;
+  });
 }
 </script>
 {% endblock %}
