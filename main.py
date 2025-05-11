@@ -1,4 +1,3 @@
-
 import eventlet
 eventlet.monkey_patch()
 
@@ -22,10 +21,6 @@ WBGT_ZONES = {
 }
 
 users = {}
-roles = {
-    "safety_officer": ["john", "mary"],  # Example safety officers
-    "supervisor": ["alex", "sarah"],     # Example supervisors
-}
 
 def sg_now():
     return datetime.now(SG_TZ)
@@ -33,22 +28,10 @@ def sg_now():
 def calculate_end(start, minutes):
     return start + timedelta(minutes=minutes)
 
-def get_user_role(username):
-    if username in roles["safety_officer"]:
-        return "safety_officer"
-    elif username in roles["supervisor"]:
-        return "supervisor"
-    return "user"
-
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         username = request.form.get("username")
-        role = get_user_role(username)
-        
-        if role in ["safety_officer", "supervisor"]:
-            return redirect(f"/monitor/{username}")
-            
         zone = request.form.get("zone")
         now = sg_now()
 
@@ -69,8 +52,7 @@ def index():
             "status": "working",
             "zone": zone,
             "start_time": now.strftime("%H:%M:%S"),
-            "end_time": proposed_end.strftime("%H:%M:%S"),
-            "role": role
+            "end_time": proposed_end.strftime("%H:%M:%S")
         }
         return redirect(f"/dashboard/{username}")
     return render_template("index.html", zones=WBGT_ZONES)
@@ -80,13 +62,6 @@ def dashboard(username):
     if username not in users:
         return redirect("/")
     return render_template("dashboard.html", user=users[username], username=username, zones=WBGT_ZONES)
-
-@app.route("/monitor/<username>")
-def monitor(username):
-    role = get_user_role(username)
-    if role not in ["safety_officer", "supervisor"]:
-        return redirect("/")
-    return render_template("monitor.html", users=users, username=username, role=role)
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)
