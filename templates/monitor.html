@@ -1,0 +1,51 @@
+
+{% extends "layout.html" %}
+{% block content %}
+<div class="flex flex-col items-center p-4">
+  <h2 class="text-xl font-bold mb-4">WBGT Status Monitor</h2>
+  <div class="text-sm text-gray-600 mb-4">Logged in as: {{ username }} ({{ role|replace('_', ' ')|title }})</div>
+
+  <div class="w-full max-w-4xl">
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+      <table class="min-w-full">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zone</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start Time</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Time</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for user_id, user_data in users.items() %}
+            {% if user_data.get('role', 'user') == 'user' %}
+              <tr>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ user_id }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user_data.status|title }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {% if user_data.zone %}
+                    <span class="px-2 py-1 rounded
+                      {% if user_data.zone == 'white' %}bg-white border border-gray-300 text-black
+                      {% elif user_data.zone == 'green' %}bg-green-400 text-white
+                      {% elif user_data.zone == 'yellow' %}bg-yellow-300 text-black
+                      {% elif user_data.zone == 'red' %}bg-red-400 text-white
+                      {% elif user_data.zone == 'black' %}bg-black text-white
+                      {% endif %}">
+                      {{ user_data.zone|title }}
+                    </span>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user_data.get('start_time', '-') }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user_data.get('end_time', '-') }}</td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
