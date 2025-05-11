@@ -1,9 +1,9 @@
+
 {% extends "layout.html" %}
 {% block content %}
 <div class="flex flex-col items-center p-4">
-
-  <!-- Header -->
   <h2 class="text-xl font-bold mb-4">WBGT Tracker</h2>
+  <div class="text-sm text-gray-600 mb-4">Logged in as: {{ username }} ({{ user.role }})</div>
 
   <!-- Timer Circle -->
   <div class="relative w-48 h-48">
@@ -14,23 +14,29 @@
     </svg>
     <div class="absolute inset-0 flex flex-col items-center justify-center">
       <div id="countdown" class="text-3xl font-bold text-gray-700">--:--</div>
-      <div class="text-sm mt-1 text-gray-600" id="zone_name_display">Zone: {{ user.zone.title() }}</div>
+      <div class="text-sm mt-1 text-gray-600" id="zone_name_display">
+        {% if user.zone %}Zone: {{ user.zone.title() }}{% endif %}
+      </div>
     </div>
   </div>
 
-  <!-- Start & End Time -->
-  <div class="mt-3 text-sm text-gray-600">
-    Start: {{ user.start_time }} · End: {{ user.end_time }}
+  <!-- Location Section -->
+  <div class="mt-4 w-full max-w-md">
+    <div class="flex space-x-2 mb-4">
+      <input type="text" id="location_name" placeholder="Location name" class="flex-1 p-2 border rounded">
+      <button onclick="saveCurrentLocation()" class="bg-blue-500 text-white px-4 py-2 rounded">Save Location</button>
+    </div>
+    <select id="saved_locations" class="w-full p-2 border rounded mb-4">
+      <option value="">Select saved location</option>
+    </select>
+    <div id="current_location" class="text-sm text-gray-600 mb-4"></div>
   </div>
 
   <!-- WBGT Zone Selector -->
   <h3 class="mt-6 text-lg font-semibold">WBGT Zones</h3>
-  <p class="text-sm text-gray-500 mb-3">Select a zone to start the work/rest cycle.</p>
-
-  <form action="/" method="POST" class="w-full max-w-xs space-y-2">
-    <input type="hidden" name="username" value="{{ username }}">
+  <div class="w-full max-w-xs space-y-2">
     {% for key, z in zones.items() %}
-    <button name="zone" value="{{ key }}" class="w-full p-4 rounded shadow text-left
+    <button onclick="startZone('{{ key }}')" class="w-full p-4 rounded shadow text-left
       {% if key == 'white' %}bg-white text-black
       {% elif key == 'green' %}bg-green-400 text-white
       {% elif key == 'yellow' %}bg-yellow-300 text-black
@@ -39,56 +45,111 @@
       {% endif %}
       hover:scale-[1.02] transition">
       <div class="font-bold text-lg">{{ key.title() }} Zone</div>
-      <div class="text-sm">
-        Work: {{ z.work }} mins · Rest: {{ z.rest }} mins<br>
-        {% if z.min and z.max %}
-        Temp: {{ "%.1f"|format(z.min) }}°C – {{ "%.1f"|format(z.max) }}°C
-        {% elif z.min %}
-        Temp: {{ "%.1f"|format(z.min) }}°C and above
-        {% else %}
-        Temp: N/A
-        {% endif %}
-      </div>
+      <div class="text-sm">Work: {{ z.work }} mins · Rest: {{ z.rest }} mins</div>
     </button>
     {% endfor %}
-  </form>
+  </div>
 </div>
 
-<!-- Countdown Script -->
 <script>
-  const endTimeStr = "{{ user.end_time }}";
-  const status = "{{ user.status }}";
+let currentPosition = null;
 
-  if (endTimeStr && status === "working") {
-    const endParts = endTimeStr.split(":");
-    const end = new Date();
-    end.setHours(parseInt(endParts[0]));
-    end.setMinutes(parseInt(endParts[1]));
-    end.setSeconds(parseInt(endParts[2]));
-
-    const totalSeconds = Math.floor((end - new Date()) / 1000);
-    const progress = document.getElementById("progress-ring");
-    const radius = 45;
-    const circumference = 2 * Math.PI * radius;
-    progress.style.strokeDasharray = circumference;
-
-    const interval = setInterval(() => {
-      const now = new Date();
-      const diff = Math.floor((end - now) / 1000);
-      const mins = Math.floor(diff / 60);
-      const secs = diff % 60;
-
-      document.getElementById("countdown").textContent =
-        `${String(Math.max(mins, 0)).padStart(2, '0')}:${String(Math.max(secs, 0)).padStart(2, '0')}`;
-
-      progress.style.strokeDashoffset = circumference * (1 - diff / totalSeconds);
-
-      if (diff <= 0) {
-        clearInterval(interval);
-        progress.style.strokeDashoffset = circumference;
-        document.getElementById("countdown").textContent = "--:--";
-      }
-    }, 1000);
+function updateLocationDisplay() {
+  if (currentPosition) {
+    document.getElementById('current_location').textContent = 
+      `Current location: ${currentPosition.coords.latitude.toFixed(6)}, ${currentPosition.coords.longitude.toFixed(6)}`;
   }
+}
+
+function loadSavedLocations() {
+  fetch('/get_locations')
+    .then(response => response.json())
+    .then(locations => {
+      const select = document.getElementById('saved_locations');
+      select.innerHTML = '<option value="">Select saved location</option>';
+      for (const [name, coords] of Object.entries(locations)) {
+        select.innerHTML += `<option value="${coords.lat},${coords.lng}">${name}</option>`;
+      }
+    });
+}
+
+function saveCurrentLocation() {
+  const name = document.getElementById('location_name').value;
+  if (!name || !currentPosition) return;
+  
+  fetch('/save_location', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: name,
+      lat: currentPosition.coords.latitude,
+      lng: currentPosition.coords.longitude
+    })
+  }).then(() => {
+    loadSavedLocations();
+    document.getElementById('location_name').value = '';
+  });
+}
+
+function startZone(zone) {
+  const locationSelect = document.getElementById('saved_locations');
+  const location = locationSelect.value || 
+    (currentPosition ? `${currentPosition.coords.latitude},${currentPosition.coords.longitude}` : '');
+    
+  fetch('/set_zone', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `username={{ username }}&zone=${zone}&location=${location}`
+  }).then(() => location.reload());
+}
+
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition(
+    (position) => {
+      currentPosition = position;
+      updateLocationDisplay();
+    },
+    null,
+    { enableHighAccuracy: true }
+  );
+}
+
+loadSavedLocations();
+
+// Timer code
+const endTimeStr = "{{ user.end_time }}";
+const status = "{{ user.status }}";
+
+if (endTimeStr && status === "working") {
+  const endParts = endTimeStr.split(":");
+  const end = new Date();
+  end.setHours(parseInt(endParts[0]));
+  end.setMinutes(parseInt(endParts[1]));
+  end.setSeconds(parseInt(endParts[2]));
+
+  const totalSeconds = Math.floor((end - new Date()) / 1000);
+  const progress = document.getElementById("progress-ring");
+  const radius = 45;
+  const circumference = 2 * Math.PI * radius;
+  progress.style.strokeDasharray = circumference;
+
+  const interval = setInterval(() => {
+    const now = new Date();
+    const diff = Math.floor((end - now) / 1000);
+    const mins = Math.floor(diff / 60);
+    const secs = diff % 60;
+
+    document.getElementById("countdown").textContent =
+      `${String(Math.max(mins, 0)).padStart(2, '0')}:${String(Math.max(secs, 0)).padStart(2, '0')}`;
+
+    progress.style.strokeDashoffset = circumference * (1 - diff / totalSeconds);
+
+    if (diff <= 0) {
+      clearInterval(interval);
+      progress.style.strokeDashoffset = circumference;
+      document.getElementById("countdown").textContent = "--:--";
+    }
+  }, 1000);
+}
 </script>
 {% endblock %}

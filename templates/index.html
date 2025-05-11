@@ -1,13 +1,14 @@
+
 {% extends "layout.html" %}
 {% block content %}
 <div class="max-w-md mx-auto mt-12 bg-white p-6 rounded shadow">
   <h2 class="text-xl font-bold mb-4 text-center">Start WBGT Tracker</h2>
   <form method="POST" class="space-y-4">
     <input type="text" name="username" placeholder="Enter your name" required class="w-full p-2 border rounded" />
-    <select name="zone" class="w-full p-2 border rounded" required>
-      <option value="" disabled selected>Select WBGT zone</option>
-      {% for key, z in zones.items() %}
-        <option value="{{ key }}">{{ key.title() }} (Work: {{ z.work }} mins)</option>
+    <select name="role" class="w-full p-2 border rounded" required>
+      <option value="" disabled selected>Select your role</option>
+      {% for role in roles %}
+        <option value="{{ role }}">{{ role }}</option>
       {% endfor %}
     </select>
     <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Start</button>
