@@ -1,20 +1,9 @@
 {% extends "layout.html" %}
 {% block content %}
 <div class="flex flex-col items-center">
-  <h2 class="text-lg font-semibold mt-4">WBGT Tracker</h2>
+  <h2 class="text-xl font-semibold mt-4">WBGT Tracker</h2>
 
-  {% if user.cutoff_active and user.role in ['admin', 'supervisor'] %}
-  <div class="my-3 p-3 bg-red-200 text-red-800 rounded">
-    🚫 Cutoff is ACTIVE. You may disable it below.
-    <button onclick="disableCutoff()" class="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">Disable Cutoff</button>
-  </div>
-  {% elif user.cutoff_active %}
-  <div class="my-3 p-3 bg-red-100 text-red-700 rounded">
-    🚫 Cutoff is ACTIVE. You are currently in mandatory rest.
-  </div>
-  {% endif %}
-
-  <!-- Progress Ring -->
+  <!-- Countdown Ring -->
   <div class="relative w-48 h-48 my-4">
     <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r="45" stroke="#e5e7eb" stroke-width="10" fill="none" />
@@ -26,197 +15,68 @@
 
   <!-- Zone Info -->
   <p class="mt-2 font-medium text-center" id="zone_display">
-    {% if user.status != 'idle' %}
-      🟢 Currently in <strong>{{ user.zone.title() }}</strong> zone.
+    {% if user.status == 'working' %}
+      🟢 Currently in <strong>{{ user.zone.title() }}</strong> zone
     {% else %}
-      Please select a WBGT zone to begin.
+      Please select a WBGT zone below
     {% endif %}
   </p>
-
-  <p class="text-sm mt-1 text-gray-600" id="timer_start_end">
-    {% if user.status != 'idle' %}
+  <p class="text-sm mt-1 text-gray-600">
+    {% if user.status == 'working' %}
       Start: {{ user.start_time }} · End: {{ user.end_time }}
     {% endif %}
   </p>
 
-  <!-- Action Buttons -->
-  <div class="mt-4 flex space-x-4">
-    <button onclick="undo()" class="p-3 rounded-full bg-gray-300 text-white hover:bg-gray-400">⏮️</button>
-    <button onclick="confirmOverwrite()" class="p-3 rounded-full bg-yellow-500 text-white hover:bg-yellow-600">📝</button>
-    <button onclick="startZone()" class="p-3 rounded-full bg-blue-500 text-white hover:bg-blue-600" id="startBtn">▶️</button>
-    <button onclick="startRestCycle()" class="p-3 rounded-full bg-green-500 text-white hover:bg-green-600">☕</button>
-  </div>
-
   <!-- Zone Selector -->
-  <h3 class="mt-6 font-semibold text-lg">Select Zone</h3>
-  <p class="text-sm mb-3">Tap a zone below and press ▶️ to start.</p>
-
-  <div class="space-y-2 w-full max-w-xs" id="zone_list">
-    {% for key, zone in zones.items() %}
-    {% if key != 'cutoff' or user.role in ['admin', 'supervisor'] %}
-    <div class="cursor-pointer p-4 rounded shadow 
-      {% if key == 'white' %}bg-white{% elif key == 'green' %}bg-green-400 text-white
-      {% elif key == 'yellow' %}bg-yellow-300
-      {% elif key == 'red' %}bg-red-400 text-white
-      {% elif key == 'black' %}bg-black text-white
-      {% elif key == 'cutoff' %}bg-red-900 text-white{% endif %}"
-      onclick="selectZone('{{ key }}')">
-      <strong>{{ key.title() }} Zone</strong><br>
-      <span class="text-sm">{{ zone.work }}:{{ zone.rest }} cycle<br>{{ zone.min }}°C - {{ zone.max }}°C</span>
+  <form method="POST" action="/">
+    <input type="hidden" name="username" value="{{ username }}">
+    <div class="mt-6 space-y-2 w-full max-w-xs">
+      {% for key, z in zones.items() %}
+      <button name="zone" value="{{ key }}" type="submit"
+        class="w-full p-4 rounded text-white shadow
+        {% if key == 'white' %}bg-white text-black border border-gray-300{% endif %}
+        {% if key == 'green' %}bg-green-500{% endif %}
+        {% if key == 'yellow' %}bg-yellow-400{% endif %}
+        {% if key == 'red' %}bg-red-500{% endif %}
+        {% if key == 'black' %}bg-black{% endif %}">
+        <strong>{{ key.title() }} Zone</strong><br>
+        <span class="text-sm">Work: {{ z.work }}m · Rest: {{ z.rest }}m</span>
+      </button>
+      {% endfor %}
     </div>
-    {% endif %}
-    {% endfor %}
-  </div>
+  </form>
 </div>
 
 <script>
-let selectedZone = null;
-let username = "{{ username }}";
-let userRole = "{{ user.role }}";
-let userZone = "{{ user.zone }}";
+let endTimeStr = "{{ user.end_time }}";
 let userStatus = "{{ user.status }}";
-let cutoffActive = {{ 'true' if user.cutoff_active else 'false' }};
-let timerInterval = null;
-
-function selectZone(zone) {
-  if (cutoffActive) return alert("Cannot select zones during active cutoff.");
-  selectedZone = zone;
-
-  const currentDisplay = userStatus !== "idle" && userZone
-    ? `🟢 Currently in <strong>${userZone.charAt(0).toUpperCase() + userZone.slice(1)}</strong> zone.<br>`
-    : '';
-  const selectedDisplay = `✅ <span class="text-sm">${zone.charAt(0).toUpperCase() + zone.slice(1)} zone selected. Tap ▶️ to start.</span>`;
-  document.getElementById("zone_display").innerHTML = currentDisplay + selectedDisplay;
-}
-
-function startZone() {
-  if (!selectedZone) return alert("Please select a zone first.");
-  fetch("/submit_zone", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, zone: selectedZone, role: userRole })
-  }).then(res => res.json()).then(data => {
-    if (data.error) alert(data.error);
-    else {
-      alert(data.message);
-      localStorage.removeItem("rest_started_" + username);
-      location.reload();
-    }
-  });
-}
-
-function confirmOverwrite() {
-  fetch("/confirm_overwrite", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username })
-  }).then(res => res.json()).then(data => {
-    alert(data.message);
-  });
-}
-
-function startCountdown(endTime, onComplete) {
-  clearInterval(timerInterval);
-  const totalSeconds = Math.floor((endTime - new Date()) / 1000);
-  const progress = document.getElementById("progress-ring");
-  const radius = 45;
-  const circumference = 2 * Math.PI * radius;
-
-  localStorage.setItem("end_time_" + username, endTime.toISOString());
-  progress.style.strokeDasharray = circumference;
-  progress.style.strokeDashoffset = circumference;
-
-  timerInterval = setInterval(() => {
-    const now = new Date();
-    const diff = Math.floor((endTime - now) / 1000);
-    const mins = Math.floor(diff / 60);
-    const secs = diff % 60;
-
-    document.getElementById("countdown").textContent =
-      `${Math.max(mins, 0).toString().padStart(2, '0')}:${Math.max(secs, 0).toString().padStart(2, '0')}`;
-
-    progress.style.strokeDashoffset = circumference * (diff / totalSeconds);
-
-    if (diff <= 0) {
-      clearInterval(timerInterval);
-      document.getElementById("progress-ring").style.strokeDashoffset = 0;
-      localStorage.removeItem("end_time_" + username);
-      onComplete();
-    }
-  }, 1000);
-}
-
-function promptRest() {
-  alert("Work cycle ended. Please press ☕ to begin your rest cycle.");
-  setTimeout(() => { alarmLoop(); }, 180000);
-}
-
-function alarmLoop() {
-  if (!localStorage.getItem("rest_started_" + username)) {
-    playAlarm();
-    setTimeout(alarmLoop, 10000);
-  }
-}
-
-function playAlarm() {
-  const sound = new Audio("/static/beep.mp3");
-  sound.play();
-  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-}
-
-function startRestCycle() {
-  if (!userZone) return alert("No previous work zone found.");
-  const restDurations = { white: 15, green: 15, yellow: 15, red: 30, black: 30, cutoff: 30 };
-  const restMins = restDurations[userZone.toLowerCase()];
+if (userStatus === 'working' && endTimeStr !== "--:--") {
+  const [h, m, s] = endTimeStr.split(":").map(Number);
   const now = new Date();
-  const restEnd = new Date(now.getTime() + restMins * 60000);
-  localStorage.setItem("rest_started_" + username, "true");
-  alert("Rest started.");
-  startCountdown(restEnd, () => {
-    alert("Rest complete. You may now select a new zone.");
-    localStorage.removeItem("rest_started_" + username);
-    document.getElementById("zone_display").textContent = "Idle. Please select a new zone.";
-    document.getElementById("countdown").textContent = "--:--";
-  });
-}
+  const end = new Date();
+  end.setHours(h, m, s);
+  
+  if (end > now) {
+    const total = Math.floor((end - now) / 1000);
+    const ring = document.getElementById("progress-ring");
+    const count = document.getElementById("countdown");
+    const circ = 2 * Math.PI * 45;
+    ring.style.strokeDasharray = circ;
 
-function undo() {
-  fetch("/undo", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username })
-  }).then(res => res.json()).then(data => {
-    alert(data.message || data.error);
-    localStorage.removeItem("end_time_" + username);
-    location.reload();
-  });
-}
+    let remaining = total;
+    const interval = setInterval(() => {
+      let mins = Math.floor(remaining / 60);
+      let secs = remaining % 60;
+      count.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      ring.style.strokeDashoffset = circ * (remaining / total);
 
-window.onload = () => {
-  const endTimeStr = "{{ user.end_time }}";
-  if (userStatus === 'working' && endTimeStr && endTimeStr !== "--:--") {
-    const parts = endTimeStr.split(":");
-    const now = new Date();
-    const end = new Date();
-    end.setHours(parseInt(parts[0]));
-    end.setMinutes(parseInt(parts[1]));
-    end.setSeconds(parseInt(parts[2]));
-
-    // If it's in the past, don’t start countdown
-    if (end > now) {
-      startCountdown(end, promptRest);
-    } else {
-      document.getElementById("countdown").textContent = "--:--";
-    }
+      if (--remaining < 0) {
+        clearInterval(interval);
+        count.textContent = "--:--";
+        ring.style.strokeDashoffset = 0;
+      }
+    }, 1000);
   }
-};
-
-
-const socket = io();
-socket.on("status_update", function(data) {
-  if (data.user !== username) {
-    console.log(`${data.user} changed to ${data.zone} zone`);
-  }
-});
+}
 </script>
 {% endblock %}

@@ -5,213 +5,61 @@ from flask import Flask, render_template, request, redirect, session, jsonify
 from flask_socketio import SocketIO
 from tinydb import TinyDB, Query
 from datetime import datetime, timedelta
-import threading
 import pytz
 
 app = Flask(__name__)
 app.secret_key = 'secret_key'
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 socketio = SocketIO(app, async_mode='eventlet')
 
 SG_TZ = pytz.timezone("Asia/Singapore")
 db = TinyDB("data.json")
-user_table = db.table("users")
-log_table = db.table("history")
-
+users = {}
 WBGT_ZONES = {
     "white": {"work": 60, "rest": 15},
     "green": {"work": 45, "rest": 15},
     "yellow": {"work": 30, "rest": 15},
     "red": {"work": 30, "rest": 30},
     "black": {"work": 15, "rest": 30},
-    "cutoff": {"work": 0, "rest": 60}
 }
-
-users = {}
-undo_stack = {}
-overwrite_flags = {}
 
 def sg_now():
     return datetime.now(SG_TZ)
 
-def calculate_end_time(start, minutes):
+def calculate_end(start, minutes):
     return start + timedelta(minutes=minutes)
 
-def parse_time_string(time_str):
-    try:
-        naive = datetime.strptime(time_str, "%H:%M:%S")
-        return SG_TZ.localize(naive)
-    except Exception:
-        return None
-
-def trigger_alarm(username):
-    def alarm_loop():
-        if username in users and users[username]["status"] == "awaiting_rest":
-            print(f"Alarm: {username} has not started rest.")
-            threading.Timer(10, alarm_loop).start()
-    threading.Timer(180, alarm_loop).start()
-
-def store_state(username):
-    if username in users:
-        undo_stack.setdefault(username, []).append(users[username].copy())
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
+@app.route("/", methods=["GET", "POST"])
+def index():
     if request.method == "POST":
         username = request.form.get("username")
-        role = request.form.get("role")
-        group = request.form.get("group") or "default"
-        session.update(username=username, role=role, group=group)
-        session.permanent = True
-
+        zone = request.form.get("zone")
         now = sg_now()
+
+        if username not in users:
+            users[username] = {"status": "idle"}
+
+        user = users[username]
+        work_duration = WBGT_ZONES[zone]["work"]
+        proposed_end = calculate_end(now, work_duration)
+
+        if user["status"] == "working":
+            current_end = datetime.strptime(user["end_time"], "%H:%M:%S")
+            proposed_end = min(current_end, proposed_end)
+
         users[username] = {
-            "status": "idle", "zone": "", "role": role, "username": username, "group": group,
-            "start_time": now.strftime("%H:%M:%S"), "end_time": now.strftime("%H:%M:%S"),
-            "cutoff_active": False, "cutoff_end": None, "location": None, "alarm_triggered": False
+            "status": "working",
+            "zone": zone,
+            "start_time": now.strftime("%H:%M:%S"),
+            "end_time": proposed_end.strftime("%H:%M:%S")
         }
-
-        user_table.upsert(users[username], Query().username == username)
         return redirect(f"/dashboard/{username}")
-    return render_template("login.html")
-
-@app.route("/")
-def home():
-    return redirect("/login")
+    return render_template("index.html")
 
 @app.route("/dashboard/<username>")
 def dashboard(username):
     if username not in users:
-        return redirect("/login")
-    return render_template("dashboard.html", username=username, user=users[username], zones=WBGT_ZONES)
-
-@app.route("/confirm_overwrite", methods=["POST"])
-def confirm_overwrite():
-    data = request.get_json(silent=True)
-    if not data or "username" not in data:
-        return jsonify({"error": "Missing username."}), 400
-    overwrite_flags[data["username"]] = True
-    return jsonify({"message": "Overwrite confirmed."})
-
-@app.route("/submit_zone", methods=["POST"])
-def submit_zone():
-    data = request.get_json(silent=True)
-    username, zone = data.get("username"), data.get("zone")
-    role, lat, lon = data.get("role", "user"), data.get("lat"), data.get("lon")
-    now = sg_now()
-    location = f"{lat}, {lon}" if lat and lon else None
-
-    if not username or not zone or username not in users or zone not in WBGT_ZONES:
-        return jsonify({"error": "Invalid data or session expired."}), 400
-
-    group = users[username]["group"]
-    work_minutes = WBGT_ZONES[zone]["work"]
-    user = users[username]
-
-    if zone == "cutoff":
-        if role not in ["admin", "supervisor"]:
-            return jsonify({"error": "Unauthorized cutoff."}), 403
-        for u, info in users.items():
-            if info["group"] == group:
-                users[u].update({
-                    "status": "resting", "zone": "cutoff",
-                    "start_time": now.strftime("%H:%M:%S"),
-                    "end_time": calculate_end_time(now, 30).strftime("%H:%M:%S"),
-                    "cutoff_active": True, "cutoff_end": calculate_end_time(now, 30).strftime("%H:%M:%S")
-                })
-                socketio.emit("status_update", {"user": u, "zone": "cutoff"})
-        return jsonify({"message": f"CUTOFF enforced for group {group}. All users resting."})
-
-    store_state(username)
-
-    proposed_end = calculate_end_time(now, work_minutes)
-    current_end = parse_time_string(user.get("end_time"))
-
-    if user["status"] == "working":
-        if not overwrite_flags.get(username, False):
-            return jsonify({"error": "Overwrite not confirmed. Press 📝 before ▶️."})
-        end_time = min(proposed_end, current_end) if current_end else proposed_end
-        start_time = user["start_time"]
-    else:
-        end_time = proposed_end
-        start_time = now.strftime("%H:%M:%S")
-
-    users[username].update({
-        "status": "working", "zone": zone,
-        "start_time": start_time,
-        "end_time": end_time.strftime("%H:%M:%S"),
-        "alarm_triggered": False,
-        "location": location,
-        "role": role,
-        "cutoff_active": False,
-        "cutoff_end": None
-    })
-
-    overwrite_flags[username] = False
-    user_table.upsert(users[username], Query().username == username)
-    log_table.insert({
-        "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
-        "username": username, "zone": zone, "duration": work_minutes, "status": "work"
-    })
-
-    socketio.emit("status_update", {"user": username, "zone": zone})
-
-    def prompt_rest():
-        if users[username]["status"] == "working":
-            users[username]["status"] = "awaiting_rest"
-            trigger_alarm(username)
-
-    delay = (end_time - now).total_seconds()
-    threading.Timer(delay, prompt_rest).start()
-
-    return jsonify({"message": f"{username} started {zone.upper()} zone until {end_time.strftime('%H:%M:%S')} SG."})
-
-@app.route("/deactivate_cutoff", methods=["POST"])
-def deactivate_cutoff():
-    data = request.get_json(silent=True)
-    username, role = data.get("username"), data.get("role")
-    if not username or role not in ["admin", "supervisor"]:
-        return jsonify({"error": "Invalid or unauthorized."}), 400
-    group = users[username]["group"]
-    for u, info in users.items():
-        if info["group"] == group and info["cutoff_active"]:
-            users[u].update({
-                "status": "idle", "zone": "", "cutoff_active": False,
-                "start_time": sg_now().strftime("%H:%M:%S"),
-                "end_time": sg_now().strftime("%H:%M:%S")
-            })
-            socketio.emit("status_update", {"user": u, "zone": "idle"})
-    return jsonify({"message": f"Cutoff deactivated for group {group}."})
-
-@app.route("/undo", methods=["POST"])
-def undo():
-    data = request.get_json(silent=True)
-    username = data.get("username")
-    if username in undo_stack and undo_stack[username]:
-        users[username] = undo_stack[username].pop()
-        user_table.upsert(users[username], Query().username == username)
-        return jsonify({"message": f"{username}'s last WBGT zone has been reverted."})
-    return jsonify({"error": "No undo available."}), 400
-
-@app.route("/log")
-def log():
-    return render_template("zones.html", users=users)
-
-@app.route("/readings")
-def readings():
-    return render_template("readings.html", users=users)
-
-@app.route("/history")
-def history_view():
-    return render_template("history.html", history=log_table.all())
-
-@app.route("/locations")
-def locations():
-    return render_template("locations.html")
-
-@app.route("/settings")
-def settings():
-    return "<h2>Settings (Coming Soon)</h2>"
+        return redirect("/")
+    return render_template("dashboard.html", user=users[username], username=username, zones=WBGT_ZONES)
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)
