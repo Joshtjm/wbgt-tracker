@@ -194,18 +194,23 @@ function undo() {
 
 window.onload = () => {
   const endTimeStr = "{{ user.end_time }}";
-  if (endTimeStr && endTimeStr !== "--:--") {
-    const parts = endTimeStr.split(":"), end = new Date();
-    end.setHours(parts[0]); end.setMinutes(parts[1]); end.setSeconds(parts[2]);
+  if (userStatus === 'working' && endTimeStr && endTimeStr !== "--:--") {
+    const parts = endTimeStr.split(":");
+    const now = new Date();
+    const end = new Date();
+    end.setHours(parseInt(parts[0]));
+    end.setMinutes(parseInt(parts[1]));
+    end.setSeconds(parseInt(parts[2]));
 
-    if (userStatus === 'working') startCountdown(end, promptRest);
-    else if (userStatus === 'resting') startCountdown(end, () => {
-      alert("Rest cycle complete. You are now idle.");
-      document.getElementById("zone_display").textContent = "Idle. Please select a new zone.";
+    // If it's in the past, don’t start countdown
+    if (end > now) {
+      startCountdown(end, promptRest);
+    } else {
       document.getElementById("countdown").textContent = "--:--";
-    });
+    }
   }
 };
+
 
 const socket = io();
 socket.on("status_update", function(data) {
