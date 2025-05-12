@@ -52,7 +52,12 @@
 
   <div class="w-full max-w-xs space-y-2" {% if system_status.cut_off or (system_status.cut_off_end_time and user.role == 'Trainer') %}style="pointer-events: none; opacity: 0.5"{% endif %}>
     {% if user.role == 'Trainer' %}
-      <button onclick="startTestCycle()" class="w-full p-4 rounded shadow text-left bg-purple-500 text-white hover:scale-[1.02] transition">
+      <button onclick="fetch('/test_cycle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'username={{ username }}'
+        }).then(() => updateDashboard())" 
+        class="w-full p-4 rounded shadow text-left bg-purple-500 text-white hover:scale-[1.02] transition">
         <div class="font-bold text-lg">Test Cycle</div>
         <div class="text-sm">Work: 10 secs · Rest: 20 secs</div>
       </button>
@@ -60,7 +65,12 @@
 
     {% for key, z in zones.items() %}
       {% if (user.role != 'Trainer') or (key != 'cut-off') %}
-        <button onclick="startZone('{{ key }}')" class="w-full p-4 rounded shadow text-left
+        <button onclick="fetch('/set_zone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'username={{ username }}&zone={{ key }}'
+          }).then(() => updateDashboard())"
+          class="w-full p-4 rounded shadow text-left
           {% if key == 'white' %}bg-white text-black
           {% elif key == 'green' %}bg-green-400 text-white
           {% elif key == 'yellow' %}bg-yellow-300 text-black
