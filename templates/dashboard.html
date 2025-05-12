@@ -34,7 +34,18 @@
 
   <!-- WBGT Zone Selector -->
   <h3 class="mt-6 text-lg font-semibold">WBGT Zones</h3>
-  <div class="w-full max-w-xs space-y-2">
+  {% if system_status.cut_off %}
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+      <strong class="font-bold">Cut-Off Mode Active!</strong>
+      <p class="text-sm">All activities must stop. Please wait for further instructions.</p>
+    </div>
+  {% elif system_status.cut_off_end_time %}
+    <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-4">
+      <strong class="font-bold">Mandatory Rest Period</strong>
+      <p class="text-sm">Normal activities will resume after: {{ system_status.cut_off_end_time }}</p>
+    </div>
+  {% endif %}
+  <div class="w-full max-w-xs space-y-2" {% if system_status.cut_off or (system_status.cut_off_end_time and user.role == 'Trainer') %}style="pointer-events: none; opacity: 0.5"{% endif %}>
     {% for key, z in zones.items() %}
     <button onclick="startZone('{{ key }}')" class="w-full p-4 rounded shadow text-left
       {% if key == 'white' %}bg-white text-black
