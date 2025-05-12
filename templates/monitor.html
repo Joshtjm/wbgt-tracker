@@ -129,6 +129,7 @@
   </div>
   
   <script>
+    const socket = io();
     socket.on('history_update', (data) => {
       const tbody = document.querySelector('#history-table tbody');
       tbody.innerHTML = data.history.map(entry => `

@@ -105,18 +105,21 @@ let restNotificationInterval = null;
 
 function startTimer(endTimeStr) {
   clearTimer();
+  if (!endTimeStr) return;
+  
   const endParts = endTimeStr.split(":");
   const end = new Date();
   end.setHours(parseInt(endParts[0]));
   end.setMinutes(parseInt(endParts[1]));
   end.setSeconds(parseInt(endParts[2]));
 
-  const now = new Date();
-  const totalSeconds = Math.floor((end - now) / 1000);
   const progress = document.getElementById("progress-ring");
   const radius = 45;
   const circumference = 2 * Math.PI * radius;
-  progress.style.strokeDasharray = circumference;
+  progress.style.strokeDasharray = `${circumference}`;
+  
+  const totalSeconds = Math.max(0, Math.floor((end - new Date()) / 1000));
+  let remainingSeconds = totalSeconds;
 
   timerInterval = setInterval(() => {
     const now = new Date();
