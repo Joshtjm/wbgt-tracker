@@ -190,6 +190,13 @@ def save_location():
 def get_locations():
     return jsonify(load_locations())
 
+@app.route("/get_updates")
+def get_updates():
+    return jsonify({
+        "users": users,
+        "system_status": system_status
+    })
+
 if __name__ == "__main__":
     locations = load_locations()
     socketio.run(app, debug=True)

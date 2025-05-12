@@ -117,9 +117,39 @@ function startZone(zone) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `username={{ username }}&zone=${zone}&location=${location}`
   }).then(() => {
-    window.location.href = window.location.href;
+    updateDashboard();
   });
 }
+
+function updateDashboard() {
+  fetch('/get_updates')
+    .then(response => response.json())
+    .then(data => {
+      const userData = data.users['{{ username }}'];
+      if (userData) {
+        document.getElementById('zone_name_display').innerHTML = 
+          userData.zone ? `Zone: ${userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1)}` : '';
+        
+        if (userData.start_time && userData.end_time) {
+          startTimer(userData.end_time);
+        } else {
+          clearTimer();
+        }
+      }
+      
+      // Update system status displays
+      if (data.system_status.cut_off) {
+        document.querySelector('.w-full.max-w-xs').style.pointerEvents = 'none';
+        document.querySelector('.w-full.max-w-xs').style.opacity = '0.5';
+      } else {
+        document.querySelector('.w-full.max-w-xs').style.pointerEvents = '';
+        document.querySelector('.w-full.max-w-xs').style.opacity = '';
+      }
+    });
+}
+
+// Auto-update every 5 seconds
+setInterval(updateDashboard, 5000);
 
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(

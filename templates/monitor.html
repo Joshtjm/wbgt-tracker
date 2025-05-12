@@ -149,8 +149,11 @@ function resetLogs() {
 }
 
 function updateSelectedUsers(zone) {
-  const selectedUsers = Array.from(document.getElementById('userSelect').selectedOptions).map(opt => opt.value);
-  if (!selectedUsers.length) return;
+  const selectedUsers = Array.from(document.querySelectorAll('.user-checkbox:checked')).map(cb => cb.value);
+  if (!selectedUsers.length) {
+    alert('Please select at least one trainer');
+    return;
+  }
   
   Promise.all(selectedUsers.map(user => 
     fetch('/set_zone', {
@@ -158,7 +161,67 @@ function updateSelectedUsers(zone) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `username={{ username }}&target_user=${user}&zone=${zone}`
     })
-  )).then(() => window.location.reload());
+  )).then(() => {
+    fetchUpdates();
+  });
 }
+
+function calculateTimeLeft(endTime) {
+  if (!endTime) return '-';
+  const now = new Date();
+  const end = new Date();
+  const [hours, minutes, seconds] = endTime.split(':');
+  end.setHours(hours, minutes, seconds);
+  const diff = end - now;
+  if (diff <= 0) return '0:00';
+  const minsLeft = Math.floor(diff / 60000);
+  const secsLeft = Math.floor((diff % 60000) / 1000);
+  return `${minsLeft}:${String(secsLeft).padStart(2, '0')}`;
+}
+
+function fetchUpdates() {
+  fetch('/get_updates')
+    .then(response => response.json())
+    .then(data => {
+      // Update user data in table
+      const tbody = document.querySelector('tbody');
+      tbody.innerHTML = '';
+      Object.entries(data.users).forEach(([userId, userData]) => {
+        if (userData.role === 'Trainer') {
+          const timeLeft = calculateTimeLeft(userData.end_time);
+          const row = `
+            <tr>
+              <td class="px-4 py-3 text-sm">
+                <input type="checkbox" class="user-checkbox mr-2" value="${userId}" id="user_${userId}">
+                <label for="user_${userId}">${userId}</label>
+              </td>
+              <td class="px-4 py-3 text-sm">${userData.status}</td>
+              <td class="px-4 py-3">
+                <span class="px-2 py-1 text-sm rounded
+                  ${userData.zone === 'white' ? 'bg-white border border-gray-300 text-black' : ''}
+                  ${userData.zone === 'green' ? 'bg-green-400 text-white' : ''}
+                  ${userData.zone === 'yellow' ? 'bg-yellow-300 text-black' : ''}
+                  ${userData.zone === 'red' ? 'bg-red-400 text-white' : ''}
+                  ${userData.zone === 'black' ? 'bg-black text-white' : ''}
+                  ${userData.zone === 'cut-off' ? 'bg-red-600 text-white' : ''}">
+                  ${userData.zone ? userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1) : '-'}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-sm">${userData.start_time || '-'}</td>
+              <td class="px-4 py-3 text-sm">${userData.end_time || '-'}</td>
+              <td class="px-4 py-3 text-sm">${timeLeft}</td>
+            </tr>`;
+          tbody.innerHTML += row;
+        }
+      });
+    });
+}
+
+// Auto-update every 5 seconds
+setInterval(fetchUpdates, 5000);
+// Initial fetch
+fetchUpdates();
+</script>
+{% endblock %}
 </script>
 {% endblock %}
