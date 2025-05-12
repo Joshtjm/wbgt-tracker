@@ -116,8 +116,20 @@ function startZone(zone) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `username={{ username }}&zone=${zone}&location=${location}`
-  }).then(() => {
+  })
+  .then(response => {
+    if (!response.ok) {
+      return response.json().then(err => {
+        throw new Error(err.error || 'Failed to set zone');
+      });
+    }
+    return response.json();
+  })
+  .then(() => {
     updateDashboard();
+  })
+  .catch(error => {
+    alert(error.message);
   });
 }
 
