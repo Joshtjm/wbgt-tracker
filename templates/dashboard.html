@@ -91,6 +91,9 @@ function clearTimer() {
   document.getElementById("progress-ring").style.strokeDashoffset = 283;
 }
 
+let restPromptTimeout = null;
+let restNotificationInterval = null;
+
 function startTimer(endTimeStr) {
   clearTimer();
   const endParts = endTimeStr.split(":");
@@ -114,7 +117,9 @@ function startTimer(endTimeStr) {
 
     if (diff <= 0) {
       clearTimer();
-      notifyUser('Work cycle completed!', 'Please start your rest cycle.');
+      if ("{{ user.role }}" === "Trainer" && "{{ user.status }}" === "working") {
+        showRestPrompt();
+      }
       return;
     }
 
@@ -122,6 +127,67 @@ function startTimer(endTimeStr) {
       `${String(Math.max(mins, 0)).padStart(2, '0')}:${String(Math.max(secs, 0)).padStart(2, '0')}`;
     progress.style.strokeDashoffset = circumference * (1 - diff / totalSeconds);
   }, 1000);
+}
+
+function showRestPrompt() {
+  const promptDiv = document.createElement('div');
+  promptDiv.id = 'rest-prompt';
+  promptDiv.innerHTML = `
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+      <div class="bg-white p-6 rounded-lg shadow-xl">
+        <h3 class="text-lg font-bold mb-4">Work Cycle Complete</h3>
+        <p class="mb-4">Would you like to start your rest cycle?</p>
+        <div class="flex justify-end space-x-4">
+          <button onclick="respondToRestPrompt(false)" class="px-4 py-2 bg-gray-200 rounded">No</button>
+          <button onclick="respondToRestPrompt(true)" class="px-4 py-2 bg-blue-500 text-white rounded">Yes</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(promptDiv);
+  
+  // Set timeout for 3 minutes
+  restPromptTimeout = setTimeout(() => {
+    if (document.getElementById('rest-prompt')) {
+      notifyUser('Rest Cycle Required', 'Please start your rest cycle now.');
+      // Notify safety officers
+      notifyOfficers();
+    }
+  }, 180000);
+}
+
+function respondToRestPrompt(startRest) {
+  const promptDiv = document.getElementById('rest-prompt');
+  if (promptDiv) {
+    promptDiv.remove();
+  }
+  clearTimeout(restPromptTimeout);
+  
+  if (startRest) {
+    fetch('/start_rest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `username={{ username }}`
+    }).then(() => {
+      updateDashboard();
+    });
+  } else {
+    // Remind every 30 seconds for 3 minutes
+    let reminderCount = 0;
+    restNotificationInterval = setInterval(() => {
+      reminderCount++;
+      if (reminderCount <= 6) {
+        notifyUser('Rest Reminder', 'Please start your rest cycle.');
+      } else {
+        clearInterval(restNotificationInterval);
+        notifyOfficers();
+      }
+    }, 30000);
+  }
+}
+
+function notifyOfficers() {
+  notifyUser('User Alert', `${username} has not started their rest cycle.`);
 }
 
 function startTestCycle() {

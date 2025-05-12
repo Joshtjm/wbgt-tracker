@@ -23,7 +23,17 @@ WBGT_ZONES = {
 ROLES = ["Trainer", "Safety Officer", "Supervisor"]
 users = {}
 locations = {}
+history_log = []
 system_status = {"cut_off": False, "cut_off_end_time": None}
+
+def log_activity(username, action, zone=None):
+    timestamp = datetime.now(SG_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    history_log.append({
+        "timestamp": timestamp,
+        "username": username,
+        "action": action,
+        "zone": zone
+    })
 
 def is_authority(role):
     return role in ["Safety Officer", "Supervisor"]
@@ -206,10 +216,38 @@ def test_cycle():
     
     return jsonify({"success": True})
 
+@app.route("/start_rest", methods=["POST"])
+def start_rest():
+    username = request.form.get("username")
+    if username not in users:
+        return jsonify({"error": "User not found"}), 404
+        
+    now = sg_now()
+    user_data = users[username]
+    if user_data["status"] != "working":
+        return jsonify({"error": "Not in work cycle"}), 400
+        
+    zone = user_data["zone"]
+    rest_duration = WBGT_ZONES[zone]["rest"]
+    users[username].update({
+        "status": "resting",
+        "start_time": now.strftime("%H:%M:%S"),
+        "end_time": (now + timedelta(minutes=rest_duration)).strftime("%H:%M:%S")
+    })
+    log_activity(username, "start_rest", zone)
+    return jsonify({"success": True})
+
+@app.route("/get_history")
+def get_history():
+    return jsonify(history_log)
+
 @app.route("/get_updates")
 def get_updates():
     now = sg_now()
-    
+    updates = check_user_cycles(now)
+    return jsonify(updates)
+
+def check_user_cycles(now):
     # Check for completed cycles
     for user_id, user_data in users.items():
         if user_data.get("status") == "working" and user_data.get("end_time"):
