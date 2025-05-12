@@ -50,30 +50,34 @@
       <p class="text-sm">Normal activities will resume after: {{ system_status.cut_off_end_time }}</p>
     </div>
   {% endif %}
+  
   <div class="w-full max-w-xs space-y-2" {% if system_status.cut_off or (system_status.cut_off_end_time and user.role == 'Trainer') %}style="pointer-events: none; opacity: 0.5"{% endif %}>
     {% if user.role == 'Trainer' %}
-    <button onclick="startTestCycle()" class="w-full p-4 rounded shadow text-left bg-purple-500 text-white hover:scale-[1.02] transition">
-      <div class="font-bold text-lg">Test Cycle</div>
-      <div class="text-sm">Work: 10 secs · Rest: 20 secs</div>
-    </button>
-{% endif %}
-{% for key, z in zones.items() %}
-    {% if (user.role != 'Trainer') or (key != 'cut-off') %}
-    <button onclick="startZone('{{ key }}')" class="w-full p-4 rounded shadow text-left
-      {% if key == 'white' %}bg-white text-black
-      {% elif key == 'green' %}bg-green-400 text-white
-      {% elif key == 'yellow' %}bg-yellow-300 text-black
-      {% elif key == 'red' %}bg-red-400 text-white
-      {% elif key == 'black' %}bg-black text-white
+      <button onclick="startTestCycle()" class="w-full p-4 rounded shadow text-left bg-purple-500 text-white hover:scale-[1.02] transition">
+        <div class="font-bold text-lg">Test Cycle</div>
+        <div class="text-sm">Work: 10 secs · Rest: 20 secs</div>
+      </button>
+    {% endif %}
+    
+    {% for key, z in zones.items() %}
+      {% if (user.role != 'Trainer') or (key != 'cut-off') %}
+        <button onclick="startZone('{{ key }}')" class="w-full p-4 rounded shadow text-left
+          {% if key == 'white' %}bg-white text-black
+          {% elif key == 'green' %}bg-green-400 text-white
+          {% elif key == 'yellow' %}bg-yellow-300 text-black
+          {% elif key == 'red' %}bg-red-400 text-white
+          {% elif key == 'black' %}bg-black text-white
+          {% endif %}
+          hover:scale-[1.02] transition">
+          <div class="font-bold text-lg">{{ key.title() }}</div>
+          <div class="text-sm">Work: {{ z.work }} mins · Rest: {{ z.rest }} mins</div>
+        </button>
       {% endif %}
-      hover:scale-[1.02] transition">
-      <div class="font-bold text-lg">{{ key.title() }} Zone</div>
-      <div class="text-sm">Work: {{ z.work }} mins · Rest: {{ z.rest }} mins</div>
-    </button>
     {% endfor %}
   </div>
 </div>
 
+<script src="/static/notifications.js"></script>
 <script>
 let currentPosition = null;
 let timerInterval = null;
@@ -118,6 +122,28 @@ function startTimer(endTimeStr) {
       `${String(Math.max(mins, 0)).padStart(2, '0')}:${String(Math.max(secs, 0)).padStart(2, '0')}`;
     progress.style.strokeDashoffset = circumference * (1 - diff / totalSeconds);
   }, 1000);
+}
+
+function startTestCycle() {
+  fetch('/test_cycle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `username={{ username }}`
+  })
+  .then(response => {
+    if (!response.ok) {
+      return response.json().then(err => {
+        throw new Error(err.error || 'Failed to start test cycle');
+      });
+    }
+    return response.json();
+  })
+  .then(() => {
+    updateDashboard();
+  })
+  .catch(error => {
+    alert(error.message);
+  });
 }
 
 function updateLocationDisplay() {
@@ -199,8 +225,7 @@ function updateDashboard() {
         }
       }
       
-      // Update system status displays
-      if (data.system_status.cut_off) {
+      if (data.system_status.cut_off || (data.system_status.cut_off_end_time && '{{ user.role }}' === 'Trainer')) {
         document.querySelector('.w-full.max-w-xs').style.pointerEvents = 'none';
         document.querySelector('.w-full.max-w-xs').style.opacity = '0.5';
       } else {
@@ -209,9 +234,6 @@ function updateDashboard() {
       }
     });
 }
-
-// Auto-update every 5 seconds
-setInterval(updateDashboard, 5000);
 
 if (navigator.geolocation) {
   navigator.geolocation.watchPosition(
@@ -225,41 +247,13 @@ if (navigator.geolocation) {
 }
 
 loadSavedLocations();
+setInterval(updateDashboard, 5000);
 
-// Timer code
+// Initial timer setup
 const endTimeStr = "{{ user.end_time }}";
 const status = "{{ user.status }}";
-
 if (endTimeStr && status === "working") {
-  const endParts = endTimeStr.split(":");
-  const end = new Date();
-  end.setHours(parseInt(endParts[0]));
-  end.setMinutes(parseInt(endParts[1]));
-  end.setSeconds(parseInt(endParts[2]));
-
-  const totalSeconds = Math.floor((end - new Date()) / 1000);
-  const progress = document.getElementById("progress-ring");
-  const radius = 45;
-  const circumference = 2 * Math.PI * radius;
-  progress.style.strokeDasharray = circumference;
-
-  const interval = setInterval(() => {
-    const now = new Date();
-    const diff = Math.floor((end - now) / 1000);
-    const mins = Math.floor(diff / 60);
-    const secs = diff % 60;
-
-    document.getElementById("countdown").textContent =
-      `${String(Math.max(mins, 0)).padStart(2, '0')}:${String(Math.max(secs, 0)).padStart(2, '0')}`;
-
-    progress.style.strokeDashoffset = circumference * (1 - diff / totalSeconds);
-
-    if (diff <= 0) {
-      clearInterval(interval);
-      progress.style.strokeDashoffset = circumference;
-      document.getElementById("countdown").textContent = "--:--";
-    }
-  }, 1000);
+  startTimer(endTimeStr);
 }
 </script>
 {% endblock %}
