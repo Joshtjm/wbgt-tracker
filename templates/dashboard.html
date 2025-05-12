@@ -1,4 +1,3 @@
-
 {% extends "layout.html" %}
 {% block content %}
 <div class="flex flex-col items-center p-4">
@@ -50,7 +49,7 @@
       <p class="text-sm">Normal activities will resume after: {{ system_status.cut_off_end_time }}</p>
     </div>
   {% endif %}
-  
+
   <div class="w-full max-w-xs space-y-2" {% if system_status.cut_off or (system_status.cut_off_end_time and user.role == 'Trainer') %}style="pointer-events: none; opacity: 0.5"{% endif %}>
     {% if user.role == 'Trainer' %}
       <button onclick="startTestCycle()" class="w-full p-4 rounded shadow text-left bg-purple-500 text-white hover:scale-[1.02] transition">
@@ -58,7 +57,7 @@
         <div class="text-sm">Work: 10 secs · Rest: 20 secs</div>
       </button>
     {% endif %}
-    
+
     {% for key, z in zones.items() %}
       {% if (user.role != 'Trainer') or (key != 'cut-off') %}
         <button onclick="startZone('{{ key }}')" class="w-full p-4 rounded shadow text-left
@@ -145,7 +144,7 @@ function showRestPrompt() {
     </div>
   `;
   document.body.appendChild(promptDiv);
-  
+
   // Start the 3-minute countdown for mandatory rest
   restPromptTimeout = setTimeout(() => {
     if (document.getElementById('rest-prompt')) {
@@ -170,7 +169,7 @@ function addManualRestButton() {
     document.querySelector('.w-full.max-w-xs').appendChild(btn);
   }
 }
-  
+
   // Set timeout for 3 minutes
   restPromptTimeout = setTimeout(() => {
     if (document.getElementById('rest-prompt')) {
@@ -187,27 +186,30 @@ function respondToRestPrompt(startRest) {
     promptDiv.remove();
   }
   clearTimeout(restPromptTimeout);
-  
+
   if (startRest) {
     fetch('/start_rest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `username={{ username }}`
-    }).then(() => {
+    }).then(response => response.json())
+    .then(() => {
       updateDashboard();
     });
   } else {
-    // Remind every 30 seconds for 3 minutes
+    // Add manual rest button when user clicks 'No'
+    addManualRestButton();
+    // Start notification interval
     let reminderCount = 0;
     restNotificationInterval = setInterval(() => {
       reminderCount++;
-      if (reminderCount <= 6) {
+      if (reminderCount <= 6) { // Remind for 3 minutes (6 * 30 seconds)
         notifyUser('Rest Reminder', 'Please start your rest cycle.');
       } else {
         clearInterval(restNotificationInterval);
         notifyOfficers();
       }
-    }, 30000);
+    }, 30000); // Every 30 seconds
   }
 }
 
@@ -259,7 +261,7 @@ function loadSavedLocations() {
 function saveCurrentLocation() {
   const name = document.getElementById('location_name').value;
   if (!name || !currentPosition) return;
-  
+
   fetch('/save_location', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -278,7 +280,7 @@ function startZone(zone) {
   const locationSelect = document.getElementById('saved_locations');
   const location = locationSelect.value || 
     (currentPosition ? `${currentPosition.coords.latitude},${currentPosition.coords.longitude}` : '');
-    
+
   fetch('/set_zone', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -308,14 +310,14 @@ function updateDashboard() {
       if (userData) {
         document.getElementById('zone_name_display').innerHTML = 
           userData.zone ? `Zone: ${userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1)}` : '';
-        
+
         if (userData.start_time && userData.end_time) {
           startTimer(userData.end_time);
         } else {
           clearTimer();
         }
       }
-      
+
       if (data.system_status.cut_off || (data.system_status.cut_off_end_time && '{{ user.role }}' === 'Trainer')) {
         document.querySelector('.w-full.max-w-xs').style.pointerEvents = 'none';
         document.querySelector('.w-full.max-w-xs').style.opacity = '0.5';

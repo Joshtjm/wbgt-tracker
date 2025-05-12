@@ -261,6 +261,15 @@ def check_user_cycles(now):
             if now >= end_time:
                 zone = user_data["zone"]
                 log_activity(user_id, "completed_work", zone)
+                socketio.emit('update', {'type': 'work_complete', 'user': user_id})
+        
+        if user_data.get("status") == "working" and user_data.get("end_time"):
+            end_time = datetime.strptime(user_data["end_time"], "%H:%M:%S")
+            end_time = now.replace(hour=end_time.hour, minute=end_time.minute, second=end_time.second)
+            
+            if now >= end_time:
+                zone = user_data["zone"]
+                log_activity(user_id, "completed_work", zone)
                 user_data["work_completed"] = True
                 user_data["pending_rest"] = True
                 result["users"][user_id] = user_data.copy()
