@@ -64,13 +64,13 @@ def index():
 def dashboard(username):
     if username not in users:
         return redirect("/")
-    return render_template("dashboard.html", user=users[username], username=username, zones=WBGT_ZONES)
+    return render_template("dashboard.html", user=users[username], username=username, zones=WBGT_ZONES, system_status=system_status)
 
 @app.route("/monitor/<username>")
 def monitor(username):
     if username not in users or users[username]["role"] not in ["Safety Officer", "Supervisor"]:
         return redirect("/")
-    return render_template("monitor.html", users=users, username=username, role=users[username]["role"], zones=WBGT_ZONES)
+    return render_template("monitor.html", users=users, username=username, role=users[username]["role"], zones=WBGT_ZONES, system_status=system_status)
 
 @app.route("/toggle_cut_off", methods=["POST"])
 def toggle_cut_off():
