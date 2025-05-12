@@ -190,12 +190,48 @@ def save_location():
 def get_locations():
     return jsonify(load_locations())
 
+@app.route("/test_cycle", methods=["POST"])
+def test_cycle():
+    username = request.form.get("username")
+    if username not in users:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    now = sg_now()
+    users[username].update({
+        "status": "working",
+        "zone": "test",
+        "start_time": now.strftime("%H:%M:%S"),
+        "end_time": (now + timedelta(seconds=10)).strftime("%H:%M:%S")
+    })
+    
+    return jsonify({"success": True})
+
 @app.route("/get_updates")
 def get_updates():
+    now = sg_now()
+    
+    # Check for completed cycles
+    for user_id, user_data in users.items():
+        if user_data.get("status") == "working" and user_data.get("end_time"):
+            end_time = datetime.strptime(user_data["end_time"], "%H:%M:%S")
+            end_time = now.replace(hour=end_time.hour, minute=end_time.minute, second=end_time.second)
+            
+            if now >= end_time:
+                user_data["status"] = "resting"
+                # Rest duration based on zone
+                if user_data["zone"] == "test":
+                    rest_mins = 0.33  # 20 seconds
+                else:
+                    rest_mins = WBGT_ZONES[user_data["zone"]]["rest"]
+                user_data["end_time"] = (now + timedelta(minutes=rest_mins)).strftime("%H:%M:%S")
+    
     return jsonify({
         "users": users,
         "system_status": system_status
     })
+
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
 
 if __name__ == "__main__":
     locations = load_locations()

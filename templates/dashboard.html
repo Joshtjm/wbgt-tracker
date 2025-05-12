@@ -51,7 +51,14 @@
     </div>
   {% endif %}
   <div class="w-full max-w-xs space-y-2" {% if system_status.cut_off or (system_status.cut_off_end_time and user.role == 'Trainer') %}style="pointer-events: none; opacity: 0.5"{% endif %}>
-    {% for key, z in zones.items() %}
+    {% if user.role == 'Trainer' %}
+    <button onclick="startTestCycle()" class="w-full p-4 rounded shadow text-left bg-purple-500 text-white hover:scale-[1.02] transition">
+      <div class="font-bold text-lg">Test Cycle</div>
+      <div class="text-sm">Work: 10 secs · Rest: 20 secs</div>
+    </button>
+{% endif %}
+{% for key, z in zones.items() %}
+    {% if (user.role != 'Trainer') or (key != 'cut-off') %}
     <button onclick="startZone('{{ key }}')" class="w-full p-4 rounded shadow text-left
       {% if key == 'white' %}bg-white text-black
       {% elif key == 'green' %}bg-green-400 text-white
@@ -69,6 +76,49 @@
 
 <script>
 let currentPosition = null;
+let timerInterval = null;
+
+function clearTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  document.getElementById("countdown").textContent = "--:--";
+  document.getElementById("progress-ring").style.strokeDashoffset = 283;
+}
+
+function startTimer(endTimeStr) {
+  clearTimer();
+  const endParts = endTimeStr.split(":");
+  const end = new Date();
+  end.setHours(parseInt(endParts[0]));
+  end.setMinutes(parseInt(endParts[1]));
+  end.setSeconds(parseInt(endParts[2]));
+
+  const now = new Date();
+  const totalSeconds = Math.floor((end - now) / 1000);
+  const progress = document.getElementById("progress-ring");
+  const radius = 45;
+  const circumference = 2 * Math.PI * radius;
+  progress.style.strokeDasharray = circumference;
+
+  timerInterval = setInterval(() => {
+    const now = new Date();
+    const diff = Math.floor((end - now) / 1000);
+    const mins = Math.floor(diff / 60);
+    const secs = diff % 60;
+
+    if (diff <= 0) {
+      clearTimer();
+      notifyUser('Work cycle completed!', 'Please start your rest cycle.');
+      return;
+    }
+
+    document.getElementById("countdown").textContent =
+      `${String(Math.max(mins, 0)).padStart(2, '0')}:${String(Math.max(secs, 0)).padStart(2, '0')}`;
+    progress.style.strokeDashoffset = circumference * (1 - diff / totalSeconds);
+  }, 1000);
+}
 
 function updateLocationDisplay() {
   if (currentPosition) {
