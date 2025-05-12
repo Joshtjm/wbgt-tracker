@@ -248,25 +248,24 @@ def get_updates():
     return jsonify(updates)
 
 def check_user_cycles(now):
-    # Check for completed cycles
+    result = {"users": {}, "system_status": system_status, "history": history_log}
+    
+    # Deep copy user data to avoid serialization issues
     for user_id, user_data in users.items():
+        result["users"][user_id] = user_data.copy()
+        
         if user_data.get("status") == "working" and user_data.get("end_time"):
             end_time = datetime.strptime(user_data["end_time"], "%H:%M:%S")
             end_time = now.replace(hour=end_time.hour, minute=end_time.minute, second=end_time.second)
             
             if now >= end_time:
-                user_data["status"] = "resting"
-                # Rest duration based on zone
-                if user_data["zone"] == "test":
-                    rest_mins = 0.33  # 20 seconds
-                else:
-                    rest_mins = WBGT_ZONES[user_data["zone"]]["rest"]
-                user_data["end_time"] = (now + timedelta(minutes=rest_mins)).strftime("%H:%M:%S")
-    
-    return jsonify({
-        "users": users,
-        "system_status": system_status
-    })
+                zone = user_data["zone"]
+                log_activity(user_id, "completed_work", zone)
+                user_data["work_completed"] = True
+                user_data["pending_rest"] = True
+                result["users"][user_id] = user_data.copy()
+
+    return result
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)

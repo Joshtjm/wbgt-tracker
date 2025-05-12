@@ -138,13 +138,38 @@ function showRestPrompt() {
         <h3 class="text-lg font-bold mb-4">Work Cycle Complete</h3>
         <p class="mb-4">Would you like to start your rest cycle?</p>
         <div class="flex justify-end space-x-4">
-          <button onclick="respondToRestPrompt(false)" class="px-4 py-2 bg-gray-200 rounded">No</button>
-          <button onclick="respondToRestPrompt(true)" class="px-4 py-2 bg-blue-500 text-white rounded">Yes</button>
+          <button onclick="respondToRestPrompt(false)" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">No</button>
+          <button onclick="respondToRestPrompt(true)" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Yes</button>
         </div>
       </div>
     </div>
   `;
   document.body.appendChild(promptDiv);
+  
+  // Start the 3-minute countdown for mandatory rest
+  restPromptTimeout = setTimeout(() => {
+    if (document.getElementById('rest-prompt')) {
+      notifyUser('Rest Cycle Required', 'Please start your rest cycle now.');
+      notifyOfficers();
+    }
+  }, 180000); // 3 minutes
+}
+
+// Add manual rest start button
+function addManualRestButton() {
+  const existingButton = document.getElementById('manual-rest-button');
+  if (!existingButton) {
+    const btn = document.createElement('button');
+    btn.id = 'manual-rest-button';
+    btn.className = 'w-full p-4 rounded shadow text-left bg-blue-500 text-white hover:bg-blue-600 mt-4';
+    btn.innerHTML = `
+      <div class="font-bold text-lg">Start Rest Cycle</div>
+      <div class="text-sm">Begin your mandatory rest period</div>
+    `;
+    btn.onclick = () => respondToRestPrompt(true);
+    document.querySelector('.w-full.max-w-xs').appendChild(btn);
+  }
+}
   
   // Set timeout for 3 minutes
   restPromptTimeout = setTimeout(() => {
@@ -313,7 +338,21 @@ if (navigator.geolocation) {
 }
 
 loadSavedLocations();
+// Establish WebSocket connection for real-time updates
+const socket = io();
+socket.on('connect', () => {
+  console.log('Connected to server');
+});
+
+socket.on('update', (data) => {
+  updateDashboard();
+});
+
+// Keep polling as backup
 setInterval(updateDashboard, 5000);
+
+// Initial load
+updateDashboard();
 
 // Initial timer setup
 const endTimeStr = "{{ user.end_time }}";
