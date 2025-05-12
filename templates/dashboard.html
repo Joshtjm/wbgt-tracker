@@ -318,23 +318,41 @@ function updateDashboard() {
     .then(data => {
       const userData = data.users['{{ username }}'];
       if (userData) {
-        document.getElementById('zone_name_display').innerHTML = 
-          userData.zone ? `Zone: ${userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1)}` : '';
+        // Update zone display
+        const zoneDisplay = document.getElementById('zone_name_display');
+        if (zoneDisplay) {
+          zoneDisplay.innerHTML = userData.zone ? `Zone: ${userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1)}` : '';
+        }
 
-        if (userData.start_time && userData.end_time) {
+        // Handle timer
+        if (userData.status === 'working' && userData.end_time) {
+          startTimer(userData.end_time);
+        } else if (userData.status === 'resting' && userData.end_time) {
           startTimer(userData.end_time);
         } else {
           clearTimer();
         }
+
+        // Show rest prompt if work completed
+        if (userData.work_completed && userData.pending_rest) {
+          showRestPrompt();
+        }
       }
 
-      if (data.system_status.cut_off || (data.system_status.cut_off_end_time && '{{ user.role }}' === 'Trainer')) {
-        document.querySelector('.w-full.max-w-xs').style.pointerEvents = 'none';
-        document.querySelector('.w-full.max-w-xs').style.opacity = '0.5';
-      } else {
-        document.querySelector('.w-full.max-w-xs').style.pointerEvents = '';
-        document.querySelector('.w-full.max-w-xs').style.opacity = '';
+      // Handle system status
+      const zoneButtons = document.querySelector('.w-full.max-w-xs');
+      if (zoneButtons) {
+        if (data.system_status.cut_off || (data.system_status.cut_off_end_time && '{{ user.role }}' === 'Trainer')) {
+          zoneButtons.style.pointerEvents = 'none';
+          zoneButtons.style.opacity = '0.5';
+        } else {
+          zoneButtons.style.pointerEvents = '';
+          zoneButtons.style.opacity = '';
+        }
       }
+    })
+    .catch(error => {
+      console.error('Error updating dashboard:', error);
     });
 }
 
