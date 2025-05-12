@@ -138,21 +138,36 @@ def set_zone():
     zone = request.form.get("zone")
     now = sg_now()
     
-    if system_status["cut_off"] and not is_authority(users[username]["role"]):
-        return jsonify({"error": "System is in cut-off mode"}), 403
-        
-    if system_status["cut_off_end_time"]:
-        cut_off_end = datetime.strptime(system_status["cut_off_end_time"], "%H:%M:%S")
-        cut_off_end = now.replace(hour=cut_off_end.hour, minute=cut_off_end.minute, second=cut_off_end.second)
-        if now < cut_off_end and not is_authority(users[username]["role"]):
-            return jsonify({"error": "Mandatory rest period is still active"}), 403
+    # Basic validation
+    if not all([username, zone]):
+        return jsonify({"error": "Missing required fields"}), 400
     
     if username not in users:
         return jsonify({"error": "Unauthorized"}), 401
-        
+    
     user_role = users[username]["role"]
-    if target_user != username and user_role not in ["Safety Officer", "Supervisor"]:
-        return jsonify({"error": "Unauthorized"}), 401
+    
+    # Authority check
+    is_auth = is_authority(user_role)
+    
+    # System status checks
+    if system_status["cut_off"] and not is_auth:
+        return jsonify({"error": "System is in cut-off mode"}), 403
+        
+    if system_status["cut_off_end_time"] and not is_auth:
+        cut_off_end = datetime.strptime(system_status["cut_off_end_time"], "%H:%M:%S")
+        cut_off_end = now.replace(hour=cut_off_end.hour, minute=cut_off_end.minute, second=cut_off_end.second)
+        if now < cut_off_end:
+            return jsonify({"error": "Mandatory rest period is still active"}), 403
+    
+    # Target user validation
+    if target_user != username:
+        if not is_auth:
+            return jsonify({"error": "Unauthorized to modify other users"}), 401
+        if target_user not in users:
+            return jsonify({"error": "Target user not found"}), 404
+        if users[target_user]["role"] != "Trainer":
+            return jsonify({"error": "Can only modify trainers' zones"}), 403
 
     work_duration = WBGT_ZONES[zone]["work"]
     proposed_end = calculate_end(now, work_duration)
