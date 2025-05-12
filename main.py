@@ -171,7 +171,6 @@ def set_zone():
         "location": request.form.get("location", None)
     })
     
-    socketio.emit('update_required', {'timestamp': now.strftime("%H:%M:%S")})
     return jsonify({"success": True})
 
 @app.route("/save_location", methods=["POST"])
