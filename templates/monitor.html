@@ -181,34 +181,15 @@ function resetLogs() {
 
 function updateSelectedUsers(zone) {
   const selectedUsers = Array.from(document.querySelectorAll('.user-checkbox:checked')).map(cb => cb.value);
-  if (!selectedUsers.length) {
-    alert('Please select at least one trainer');
-    return;
-  }
+  if (!selectedUsers.length) return;
   
   Promise.all(selectedUsers.map(user => 
     fetch('/set_zone', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({
-        username: '{{ username }}',
-        target_user: user,
-        zone: zone
-      }).toString()
-    }).then(response => {
-      if (!response.ok) {
-        throw new Error(`Failed to update zone for ${user}`);
-      }
-      return response.json();
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `username={{ username }}&target_user=${user}&zone=${zone}`
     })
-  ))
-  .then(() => window.location.reload())
-  .catch(error => {
-    console.error('Error updating zones:', error);
-    alert('Failed to update zone for some users. Please try again.');
-  });
+  )).then(() => window.location.reload());
 }
 </script>
 {% endblock %}
