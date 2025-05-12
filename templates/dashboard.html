@@ -13,9 +13,14 @@
         stroke-dasharray="283" stroke-dashoffset="283" stroke-linecap="round" />
     </svg>
     <div class="absolute inset-0 flex flex-col items-center justify-center">
-      <div id="countdown" class="text-3xl font-bold text-gray-700">--:--</div>
+      <div id="countdown" class="text-3xl font-bold {% if user.zone %}text-{{ user.zone }}-600{% else %}text-gray-700{% endif %}">--:--</div>
       <div class="text-sm mt-1 text-gray-600" id="zone_name_display">
         {% if user.zone %}Zone: {{ user.zone.title() }}{% endif %}
+      </div>
+      <div class="text-xs text-gray-500">
+        {% if user.start_time and user.end_time %}
+        {{ user.start_time }} - {{ user.end_time }}
+        {% endif %}
       </div>
     </div>
   </div>

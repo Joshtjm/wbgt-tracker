@@ -11,7 +11,7 @@
     <div class="bg-white p-4 rounded shadow">
       <h3 class="font-bold mb-2">System Control</h3>
       <div class="flex flex-col sm:flex-row gap-4">
-        <button onclick="toggleCutOff()" class="flex-1 p-3 rounded text-white font-bold
+        <button onclick="confirmCutOff()" class="flex-1 p-3 rounded text-white font-bold
           {% if system_status.cut_off %}
           bg-red-600 hover:bg-red-700
           {% else %}
@@ -22,6 +22,9 @@
           {% else %}
           Activate Cut-Off Mode
           {% endif %}
+        </button>
+        <button onclick="clearCommands()" class="flex-1 p-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded">
+          Clear Commands
         </button>
         <button onclick="resetLogs()" class="flex-1 p-3 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded">
           Reset User Logs
@@ -38,13 +41,16 @@
     <div class="bg-white p-4 rounded shadow">
       <h3 class="font-bold mb-2">Modify WBGT Zones</h3>
       <div class="flex flex-col sm:flex-row gap-4">
-        <select id="userSelect" multiple class="flex-1 p-2 border rounded min-h-[100px]">
+        <div class="flex-1">
           {% for user_id, user_data in users.items() %}
             {% if user_data.get('role') == 'Trainer' %}
-              <option value="{{ user_id }}">{{ user_id }}</option>
+            <div class="flex items-center p-2">
+              <input type="checkbox" id="user_{{ user_id }}" value="{{ user_id }}" class="user-checkbox mr-2">
+              <label for="user_{{ user_id }}">{{ user_id }}</label>
+            </div>
             {% endif %}
           {% endfor %}
-        </select>
+        </div>
         <div class="flex flex-col gap-2">
           {% for zone in zones %}
             {% if zone != 'cut-off' %}
@@ -104,12 +110,32 @@
 </div>
 
 <script>
+function confirmCutOff() {
+  const action = "{{ system_status.cut_off }}" === "True" ? "deactivate" : "activate";
+  if (confirm(`Are you sure you want to ${action} Cut-Off mode?`)) {
+    if (action === "activate" && !confirm("This will stop all activities. Confirm again to proceed.")) {
+      return;
+    }
+    toggleCutOff();
+  }
+}
+
 function toggleCutOff() {
   fetch('/toggle_cut_off', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `username={{ username }}`
   }).then(() => window.location.reload());
+}
+
+function clearCommands() {
+  if (confirm('Are you sure you want to clear all current commands?')) {
+    fetch('/clear_commands', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `username={{ username }}`
+    }).then(() => window.location.reload());
+  }
 }
 
 function resetLogs() {

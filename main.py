@@ -110,6 +110,27 @@ def reset_logs():
     
     return jsonify({"success": True})
 
+@app.route("/clear_commands", methods=["POST"])
+def clear_commands():
+    username = request.form.get("username")
+    if username not in users or not is_authority(users[username]["role"]):
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    global system_status
+    system_status = {"cut_off": False, "cut_off_end_time": None}
+    
+    # Reset all trainers to idle state
+    for user_id, user_data in users.items():
+        if user_data["role"] == "Trainer":
+            user_data.update({
+                "status": "idle",
+                "zone": None,
+                "start_time": None,
+                "end_time": None
+            })
+    
+    return jsonify({"success": True})
+
 @app.route("/set_zone", methods=["POST"])
 def set_zone():
     username = request.form.get("username")
