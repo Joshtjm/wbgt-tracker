@@ -79,13 +79,17 @@
           <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zone</th>
           <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Start</th>
           <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">End</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time Left</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200">
         {% for user_id, user_data in users.items() %}
           {% if user_data.get('role') == 'Trainer' %}
             <tr>
-              <td class="px-4 py-3 text-sm">{{ user_id }}</td>
+              <td class="px-4 py-3 text-sm">
+                <input type="checkbox" class="user-checkbox mr-2" value="{{ user_id }}" id="user_{{ user_id }}">
+                <label for="user_{{ user_id }}">{{ user_id }}</label>
+              </td>
               <td class="px-4 py-3 text-sm">{{ user_data.status|title }}</td>
               <td class="px-4 py-3">
                 <span class="px-2 py-1 text-sm rounded
@@ -100,6 +104,7 @@
               </td>
               <td class="px-4 py-3 text-sm">{{ user_data.get('start_time', '-') }}</td>
               <td class="px-4 py-3 text-sm">{{ user_data.get('end_time', '-') }}</td>
+              <td class="px-4 py-3 text-sm">-</td>
             </tr>
           {% endif %}
         {% endfor %}
@@ -132,27 +137,197 @@
     // Set the current user variable
     currentUser = "{{ username }}";
     userRole = "{{ role }}";
-    
+
     // Use the socket from notifications.js instead of creating a new one
     socket.on('history_update', (data) => {
-      const tbody = document.querySelector('#history-table tbody');
-      tbody.innerHTML = data.history.map(entry => `
-        <tr>
-          <td class="px-4 py-3 text-sm">${entry.timestamp}</td>
-          <td class="px-4 py-3 text-sm">${entry.username}</td>
-          <td class="px-4 py-3 text-sm">${entry.action.replace('_', ' ')}</td>
-          <td class="px-4 py-3 text-sm">${entry.zone || '-'}</td>
-          <td class="px-4 py-3 text-sm">${
-            entry.action === 'completed_work' ? 'Work cycle completed' :
-            entry.action === 'start_rest' ? 'Started rest period' : ''
-          }</td>
-        </tr>
-      `).join('');
-    });
+  const tbody = document.querySelector('#history-table tbody');
+  tbody.innerHTML = data.history.map(entry => `
+    <tr>
+      <td class="px-4 py-3 text-sm">${entry.timestamp}</td>
+      <td class="px-4 py-3 text-sm">${entry.username}</td>
+      <td class="px-4 py-3 text-sm">${entry.action.replace('_', ' ')}</td>
+      <td class="px-4 py-3 text-sm">${entry.zone || '-'}</td>
+      <td class="px-4 py-3 text-sm">${
+        entry.action === 'completed_work' ? 'Work cycle completed' :
+        entry.action === 'completed_rest' ? 'Rest cycle completed' :
+        entry.action === 'start_rest' ? 'Started rest period' :
+        entry.action === 'early_completion' ? 'Cycle ended early by user' : ''
+      }</td>
+    </tr>
+  `).join('');
+});
   </script>
 </div>
 
 <script>
+// Helper function to get zone class
+function getZoneClass(zone) {
+  switch (zone) {
+    case 'white': return 'bg-white border border-gray-300 text-black';
+    case 'green': return 'bg-green-400 text-white';
+    case 'yellow': return 'bg-yellow-300 text-black';
+    case 'red': return 'bg-red-400 text-white';
+    case 'black': return 'bg-black text-white';
+    case 'cut-off': return 'bg-red-600 text-white';
+    default: return '';
+  }
+}
+
+function calculateTimeLeft(endTime) {
+  if (!endTime) return '-';
+  const now = new Date();
+  const end = new Date();
+  const [hours, minutes, seconds] = endTime.split(':');
+  end.setHours(hours, minutes, seconds);
+  const diff = end - now;
+  if (diff <= 0) return '0:00';
+  const minsLeft = Math.floor(diff / 60000);
+  const secsLeft = Math.floor((diff % 60000) / 1000);
+  return `${minsLeft}:${String(secsLeft).padStart(2, '0')}`;
+}
+
+// Helper function to update history table
+function updateHistoryTable(history) {
+  if (!history || !history.length) return;
+  
+  const historyTbody = document.querySelector('#history-table tbody');
+  if (!historyTbody) return;
+  
+  // Get the latest 10 entries
+  const latestEntries = history.slice(-10).reverse();
+  
+  historyTbody.innerHTML = latestEntries.map(entry => `
+    <tr>
+      <td class="px-4 py-3 text-sm">${entry.timestamp}</td>
+      <td class="px-4 py-3 text-sm">${entry.username}</td>
+      <td class="px-4 py-3 text-sm">${entry.action.replace('_', ' ')}</td>
+      <td class="px-4 py-3 text-sm">${entry.zone || '-'}</td>
+      <td class="px-4 py-3 text-sm">${
+        entry.action === 'completed_work' ? 'Work cycle completed' :
+        entry.action === 'completed_rest' ? 'Rest cycle completed' :
+        entry.action === 'start_rest' ? 'Started rest period' :
+        entry.action === 'early_completion' ? 'Cycle ended early by user' : ''
+      }</td>
+    </tr>
+  `).join('');
+}
+
+// Helper function to update system status indicators
+function updateSystemStatus(status) {
+  if (!status) return;
+  
+  const cutOffButton = document.querySelector('button[onclick="confirmCutOff()"]');
+  if (cutOffButton && status.cut_off) {
+    cutOffButton.textContent = 'Deactivate Cut-Off Mode';
+    cutOffButton.classList.remove('bg-green-600', 'hover:bg-green-700');
+    cutOffButton.classList.add('bg-red-600', 'hover:bg-red-700');
+  } else if (cutOffButton) {
+    cutOffButton.textContent = 'Activate Cut-Off Mode';
+    cutOffButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+    cutOffButton.classList.add('bg-green-600', 'hover:bg-green-700');
+  }
+  
+  // Update cut-off end time message
+  const cutOffMessageContainer = document.querySelector('button[onclick="confirmCutOff()"]').parentNode;
+  const cutOffMessage = cutOffMessageContainer.querySelector('div.mt-2.text-center.text-red-600');
+  
+  if (status.cut_off_end_time) {
+    if (cutOffMessage) {
+      cutOffMessage.textContent = `Mandatory rest until: ${status.cut_off_end_time}`;
+    } else {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'mt-2 text-center text-red-600';
+      messageDiv.textContent = `Mandatory rest until: ${status.cut_off_end_time}`;
+      cutOffMessageContainer.appendChild(messageDiv);
+    }
+  } else if (cutOffMessage) {
+    cutOffMessage.remove();
+  }
+}
+
+function fetchUpdates() {
+  fetch('/get_updates')
+    .then(response => response.json())
+    .then(data => {
+      // Update user data in table
+      const tbody = document.querySelector('tbody');
+      
+      // Create a map of existing rows for faster access
+      const existingRows = {};
+      Array.from(tbody.querySelectorAll('tr')).forEach(row => {
+        const userId = row.querySelector('.user-checkbox')?.value;
+        if (userId) existingRows[userId] = row;
+      });
+      
+      // Create or update rows for each trainer
+      const updatedUserIds = [];
+      Object.entries(data.users).forEach(([userId, userData]) => {
+        if (userData.role === 'Trainer') {
+          updatedUserIds.push(userId);
+          const timeLeft = calculateTimeLeft(userData.end_time);
+          
+          if (existingRows[userId]) {
+            // Update existing row
+            const row = existingRows[userId];
+            const cells = row.querySelectorAll('td');
+            
+            // Update status
+            cells[1].textContent = userData.status;
+            
+            // Update zone
+            const zoneSpan = cells[2].querySelector('span');
+            zoneSpan.className = `px-2 py-1 text-sm rounded ${getZoneClass(userData.zone)}`;
+            zoneSpan.textContent = userData.zone ? userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1) : '-';
+            
+            // Update times
+            cells[3].textContent = userData.start_time || '-';
+            cells[4].textContent = userData.end_time || '-';
+            
+            // Update time left
+            cells[5].textContent = timeLeft;
+          } else {
+            // Create new row
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td class="px-4 py-3 text-sm">
+                <input type="checkbox" class="user-checkbox mr-2" value="${userId}" id="user_${userId}">
+                <label for="user_${userId}">${userId}</label>
+              </td>
+              <td class="px-4 py-3 text-sm">${userData.status}</td>
+              <td class="px-4 py-3">
+                <span class="px-2 py-1 text-sm rounded ${getZoneClass(userData.zone)}">
+                  ${userData.zone ? userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1) : '-'}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-sm">${userData.start_time || '-'}</td>
+              <td class="px-4 py-3 text-sm">${userData.end_time || '-'}</td>
+              <td class="px-4 py-3 text-sm">${timeLeft}</td>
+            `;
+            tbody.appendChild(row);
+          }
+        }
+      });
+      
+      // Remove rows for users who are no longer present
+      Object.keys(existingRows).forEach(userId => {
+        if (!updatedUserIds.includes(userId)) {
+          existingRows[userId].remove();
+        }
+      });
+      
+      // Update history table
+      if (data.history) {
+        updateHistoryTable(data.history);
+      }
+      
+      // Update system status
+      updateSystemStatus(data.system_status);
+    })
+    .catch(error => {
+      console.error('Error fetching updates:', error);
+    });
+}
+
 function confirmCutOff() {
   const action = "{{ system_status.cut_off }}" === "True" ? "deactivate" : "activate";
   if (confirm(`Are you sure you want to ${action} Cut-Off mode?`)) {
@@ -168,7 +343,19 @@ function toggleCutOff() {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `username={{ username }}`
-  }).then(() => window.location.reload());
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      fetchUpdates(); // Update the UI without reloading
+    } else {
+      alert('Failed to toggle cut-off mode');
+    }
+  })
+  .catch(error => {
+    console.error('Error toggling cut-off:', error);
+    alert('An error occurred while toggling cut-off mode');
+  });
 }
 
 function clearCommands() {
@@ -177,7 +364,19 @@ function clearCommands() {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `username={{ username }}`
-    }).then(() => window.location.reload());
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        fetchUpdates(); // Update the UI without reloading
+      } else {
+        alert('Failed to clear commands');
+      }
+    })
+    .catch(error => {
+      console.error('Error clearing commands:', error);
+      alert('An error occurred while clearing commands');
+    });
   }
 }
 
@@ -187,7 +386,19 @@ function resetLogs() {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `username={{ username }}`
-    }).then(() => window.location.reload());
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        fetchUpdates(); // Update the UI without reloading
+      } else {
+        alert('Failed to reset logs');
+      }
+    })
+    .catch(error => {
+      console.error('Error resetting logs:', error);
+      alert('An error occurred while resetting logs');
+    });
   }
 }
 
@@ -222,60 +433,10 @@ function updateSelectedUsers(zone) {
   });
 }
 
-function calculateTimeLeft(endTime) {
-  if (!endTime) return '-';
-  const now = new Date();
-  const end = new Date();
-  const [hours, minutes, seconds] = endTime.split(':');
-  end.setHours(hours, minutes, seconds);
-  const diff = end - now;
-  if (diff <= 0) return '0:00';
-  const minsLeft = Math.floor(diff / 60000);
-  const secsLeft = Math.floor((diff % 60000) / 1000);
-  return `${minsLeft}:${String(secsLeft).padStart(2, '0')}`;
-}
-
-function fetchUpdates() {
-  fetch('/get_updates')
-    .then(response => response.json())
-    .then(data => {
-      // Update user data in table
-      const tbody = document.querySelector('tbody');
-      tbody.innerHTML = '';
-      Object.entries(data.users).forEach(([userId, userData]) => {
-        if (userData.role === 'Trainer') {
-          const timeLeft = calculateTimeLeft(userData.end_time);
-          const row = `
-            <tr>
-              <td class="px-4 py-3 text-sm">
-                <input type="checkbox" class="user-checkbox mr-2" value="${userId}" id="user_${userId}">
-                <label for="user_${userId}">${userId}</label>
-              </td>
-              <td class="px-4 py-3 text-sm">${userData.status}</td>
-              <td class="px-4 py-3">
-                <span class="px-2 py-1 text-sm rounded
-                  ${userData.zone === 'white' ? 'bg-white border border-gray-300 text-black' : ''}
-                  ${userData.zone === 'green' ? 'bg-green-400 text-white' : ''}
-                  ${userData.zone === 'yellow' ? 'bg-yellow-300 text-black' : ''}
-                  ${userData.zone === 'red' ? 'bg-red-400 text-white' : ''}
-                  ${userData.zone === 'black' ? 'bg-black text-white' : ''}
-                  ${userData.zone === 'cut-off' ? 'bg-red-600 text-white' : ''}">
-                  ${userData.zone ? userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1) : '-'}
-                </span>
-              </td>
-              <td class="px-4 py-3 text-sm">${userData.start_time || '-'}</td>
-              <td class="px-4 py-3 text-sm">${userData.end_time || '-'}</td>
-              <td class="px-4 py-3 text-sm">${timeLeft}</td>
-            </tr>`;
-          tbody.innerHTML += row;
-        }
-      });
-    });
-}
-
-// Auto-update every 5 seconds
-setInterval(fetchUpdates, 5000);
 // Initial fetch
 fetchUpdates();
+
+// Auto-update every 2 seconds for better responsiveness
+setInterval(fetchUpdates, 2000);
 </script>
 {% endblock %}

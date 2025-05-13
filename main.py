@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, session, jsonify
 from flask_socketio import SocketIO
 from datetime import datetime, timedelta
@@ -19,7 +22,7 @@ WBGT_ZONES = {
     "cut-off": {"work": 0, "rest": 30}
 }
 
-ROLES = ["Trainer", "Safety Officer", "Supervisor"]
+ROLES = ["Trainer", "Conducting Body"]
 users = {}
 locations = {}
 history_log = []
@@ -35,7 +38,7 @@ def log_activity(username, action, zone=None):
     })
 
 def is_authority(role):
-    return role in ["Safety Officer", "Supervisor"]
+    return role == "Conducting Body"
 
 def sg_now():
     return datetime.now(SG_TZ)
@@ -54,13 +57,18 @@ def load_locations():
     except:
         return {}
 
+# Modify the index route to include password verification:
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         username = request.form.get("username")
         role = request.form.get("role")
+        password = request.form.get("password", "")
 
-        if role in ["Safety Officer", "Supervisor"]:
+        if role == "Conducting Body" and password != "password":
+            return render_template("index.html", roles=ROLES, error="Invalid password for Conducting Body")
+
+        if role == "Conducting Body":
             users[username] = {"role": role, "status": "monitoring"}
             return redirect(f"/monitor/{username}")
 
@@ -77,7 +85,7 @@ def dashboard(username):
 
 @app.route("/monitor/<username>")
 def monitor(username):
-    if username not in users or users[username]["role"] not in ["Safety Officer", "Supervisor"]:
+    if username not in users or users[username]["role"] != "Conducting Body":
         return redirect("/")
     return render_template("monitor.html", users=users, username=username, role=users[username]["role"], zones=WBGT_ZONES, system_status=system_status)
 
@@ -360,9 +368,42 @@ def check_user_cycles(now):
 
     return result
 
-if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+@app.route('/complete_cycle_early', methods=['POST'])
+def complete_cycle_early():
+    global history_log 
+    
+    username = request.form.get('username')
+    if not username:
+        return jsonify({'error': 'Username is required'}), 400
 
+    # Update user status
+    if username in users:
+        users[username]['status'] = 'idle'
+
+        # Get the current zone
+        current_zone = users[username].get('zone')
+
+        # Clear the timing information
+        users[username]['start_time'] = None
+        users[username]['end_time'] = None
+
+        # Add to activity history
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        history_log.append({  
+            'timestamp': timestamp,
+            'username': username,
+            'action': 'early_completion',
+            'zone': current_zone,
+            'details': 'Early completion by user'
+        })
+
+        # Broadcast the update
+        socketio.emit('history_update', {'history': history_log}) 
+
+        return jsonify({'success': True})
+
+    return jsonify({'error': 'User not found'}), 404
+    
 if __name__ == "__main__":
     locations = load_locations()
-    socketio.run(app, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
