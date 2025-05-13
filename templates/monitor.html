@@ -1,4 +1,3 @@
-
 {% extends "layout.html" %}
 {% block content %}
 <div class="flex flex-col items-center p-4 max-w-4xl mx-auto">
@@ -107,7 +106,7 @@
       </tbody>
     </table>
   </div>
-  
+
   <!-- History Log -->
   <div class="mt-8 w-full bg-white shadow rounded-lg overflow-hidden">
     <h3 class="px-4 py-3 bg-gray-50 font-bold">Activity History</h3>
@@ -127,8 +126,13 @@
       </table>
     </div>
   </div>
-  
+
+  <script src="/static/notifications.js"></script>
   <script>
+    // Set the current user variable
+    currentUser = "{{ username }}";
+    userRole = "{{ role }}";
+
     const socket = io();
     socket.on('history_update', (data) => {
       const tbody = document.querySelector('#history-table tbody');
@@ -193,15 +197,28 @@ function updateSelectedUsers(zone) {
     alert('Please select at least one trainer');
     return;
   }
-  
+
+  const locationSelect = document.getElementById('saved_locations');
+  const location = locationSelect ? locationSelect.value : '';
+
   Promise.all(selectedUsers.map(user => 
     fetch('/set_zone', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `username={{ username }}&target_user=${user}&zone=${zone}`
+      body: `username={{ username }}&target_user=${user}&zone=${zone}&location=${location}`
     })
-  )).then(() => {
+  ))
+  .then(responses => Promise.all(responses.map(r => r.json())))
+  .then(results => {
+    const errors = results.filter(r => r.error);
+    if (errors.length) {
+      alert(errors[0].error);
+    }
     fetchUpdates();
+  })
+  .catch(error => {
+    console.error('Error updating zones:', error);
+    alert('Failed to update zones. Please try again.');
   });
 }
 

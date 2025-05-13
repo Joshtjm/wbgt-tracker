@@ -1,29 +1,17 @@
-run =  ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
-entrypoint = "main.py"
 modules = ["python-3.11"]
-
-hidden = [".pythonlibs"]
-
-[nix]
-channel = "stable-24_05"
-packages = ["iana-etc", "libev"]
-
-[deployment]
-run =  ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
-deploymentTarget = "cloudrun"
-
-[[ports]]
-localPort = 5000
-externalPort = 80
 
 [workflows]
 runButton = "Run"
 
 [[workflows.workflow]]
 name = "Run"
-author = 42480455
 mode = "sequential"
+author = 42583426
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "gunicorn --bind 0.0.0.0:5000 main:app"
+args = "gunicorn --worker-class eventlet --workers 1 --bind 0.0.0.0:5000 --timeout 120 main:app"
+
+[[ports]]
+localPort = 5000
+externalPort = 80

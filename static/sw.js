@@ -14,7 +14,7 @@ self.addEventListener('push', (event) => {
     badge: '/static/badge.png',
     vibrate: [200, 100, 200]
   };
-  
+
   event.waitUntil(
     self.registration.showNotification('WBGT Tracker', options)
   );
