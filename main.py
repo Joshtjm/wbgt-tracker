@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import pytz
 import json
 
+
 app = Flask(__name__)
 app.secret_key = 'secret_key'
 socketio = SocketIO(app, async_mode='eventlet', ping_timeout=60, ping_interval=25)
@@ -404,6 +405,16 @@ def complete_cycle_early():
 
     return jsonify({'error': 'User not found'}), 404
     
+# Instead of this:
 if __name__ == "__main__":
     locations = load_locations()
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+
+# Change to this:
+if __name__ == "__main__":
+    locations = load_locations()
+    # For local development only
+    import os
+    if os.environ.get('RENDER') != 'true':
+        socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    # When deployed on Render, Gunicorn will call app directly
