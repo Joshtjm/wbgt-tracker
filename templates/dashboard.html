@@ -91,10 +91,118 @@
 </div>
 
 <script src="/static/notifications.js"></script>
+<!-- Main script block -->
 <script>
   // Set the current user variable
   currentUser = "{{ username }}";
   userRole = "{{ user.role }}";
+
+  // Use the existing socket from notifications.js
+  const socketio = socket;
+
+  // System status update handler
+  socketio.on('system_status_update', function(data) {
+    // Update UI based on system status
+    const zoneButtons = document.querySelector('.w-full.max-w-xs');
+
+    // Add or update cut-off warning
+    if (data.cut_off) {
+        // Check if warning already exists
+        let warning = document.querySelector('.bg-red-100');
+        if (!warning) {
+            warning = document.createElement('div');
+            warning.className = 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4';
+            warning.innerHTML = '<strong class="font-bold">Cut-Off Mode Active!</strong>' +
+                               '<p class="text-sm">All activities must stop. Please wait for further instructions.</p>';
+            zoneButtons.parentNode.insertBefore(warning, zoneButtons);
+        }
+
+        // Disable the zone buttons
+        if (zoneButtons) {
+            zoneButtons.style.pointerEvents = 'none';
+            zoneButtons.style.opacity = '0.5';
+        }
+    } else {
+        // Remove warning if it exists
+        const warning = document.querySelector('.bg-red-100');
+        if (warning) {
+            warning.remove();
+        }
+
+        // If no mandatory rest, re-enable buttons
+        if (!data.cut_off_end_time || '{{ user.role }}' !== 'Trainer') {
+            if (zoneButtons) {
+                zoneButtons.style.pointerEvents = '';
+                zoneButtons.style.opacity = '';
+            }
+        }
+    }
+
+    // Handle mandatory rest period - UPDATED PART
+    if (data.cut_off_end_time) {
+        // Check if rest warning already exists
+        let restWarning = document.querySelector('.bg-yellow-100');
+        if (!restWarning) {
+            restWarning = document.createElement('div');
+            restWarning.className = 'bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-4';
+
+            // Format the date/time for display in local timezone
+            let endTime = new Date(data.cut_off_end_time);
+            let formattedTime = endTime.toLocaleTimeString();
+
+            restWarning.innerHTML = '<strong class="font-bold">Mandatory Rest Period</strong>' +
+                                   '<p class="text-sm">Normal activities will resume after: ' + formattedTime + '</p>';
+
+            // Find where to add this warning
+            const zoneButtons = document.querySelector('.w-full.max-w-xs');
+            if (zoneButtons) {
+                zoneButtons.parentNode.insertBefore(restWarning, zoneButtons);
+            }
+        } else {
+            // Update end time with formatted local time
+            let endTime = new Date(data.cut_off_end_time);
+            let formattedTime = endTime.toLocaleTimeString();
+            restWarning.querySelector('p.text-sm').innerText = 'Normal activities will resume after: ' + formattedTime;
+        }
+    } else {
+        // Remove rest warning if it exists
+        const restWarning = document.querySelector('.bg-yellow-100');
+        if (restWarning) {
+            restWarning.remove();
+        }
+
+        // Re-enable zone buttons if cut_off is also false
+        if (!data.cut_off) {
+            const zoneButtons = document.querySelector('.w-full.max-w-xs');
+            if (zoneButtons) {
+                zoneButtons.style.pointerEvents = '';
+                zoneButtons.style.opacity = '';
+            }
+        }
+    }
+});
+
+  // POINT 3: Add user update handler here
+  socketio.on('user_update', function(data) {
+    console.log("Received user update:", data);
+
+    // Check if current user data is included
+    if (data.users && data.users[currentUser]) {
+        const userData = data.users[currentUser];
+
+        // Update zone display
+        const zoneDisplay = document.getElementById('zone_name_display');
+        if (zoneDisplay) {
+            if (userData.zone) {
+                zoneDisplay.innerHTML = `Zone: ${userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1)}`;
+            } else {
+                zoneDisplay.innerHTML = '';  // Clear the zone display
+            }
+        }
+
+        // Update any other user-specific elements
+    }
+  });
 
   // Rest of your dashboard.html JavaScript code...
 </script>
@@ -102,7 +210,12 @@
 // Define updateDashboard function first so it's available for all function calls
 function updateDashboard() {
   fetch('/get_updates')
-    .then(response => response.json())
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      return response.json();
+    })
     .then(data => {
       const userData = data.users['{{ username }}'];
       if (userData) {
@@ -111,7 +224,6 @@ function updateDashboard() {
         if (zoneDisplay) {
           zoneDisplay.innerHTML = userData.zone ? `Zone: ${userData.zone.charAt(0).toUpperCase() + userData.zone.slice(1)}` : '';
         }
-
         // Update time display
         const timeDisplay = document.getElementById('time_display');
         if (timeDisplay && userData.start_time && userData.end_time) {
@@ -120,7 +232,6 @@ function updateDashboard() {
             <div>End: <span class="font-semibold">${userData.end_time}</span></div>
           `;
         }
-
         // Update progress ring color
         const progressRing = document.getElementById('progress-ring');
         if (progressRing && userData.zone) {
@@ -135,7 +246,6 @@ function updateDashboard() {
           const color = zoneColors[userData.zone] || '#10b981';
           progressRing.setAttribute('stroke', color);
         }
-
         // Handle timer - MODIFIED PART
         if ((userData.status === 'working' || userData.status === 'resting') && userData.end_time) {
           // Only start the timer if it's not already running or if the end time has changed
@@ -143,7 +253,7 @@ function updateDashboard() {
             lastEndTime = userData.end_time;
             startTimer(userData.end_time);
           }
-          
+
           // Show stop button when cycle is active
           const stopButtonContainer = document.getElementById('stop-button-container');
           if (stopButtonContainer) {
@@ -151,20 +261,18 @@ function updateDashboard() {
           }
         } else if (userData.status === 'idle') {
           clearTimer();
-          
+
           // Hide stop button when idle
           const stopButtonContainer = document.getElementById('stop-button-container');
           if (stopButtonContainer) {
             stopButtonContainer.style.display = 'none';
           }
         }
-
         // Show rest prompt if work completed
         if (userData.work_completed && userData.pending_rest) {
           showRestPrompt();
         }
       }
-
       // Handle system status
       const zoneButtons = document.querySelector('.w-full.max-w-xs');
       if (zoneButtons) {
@@ -179,6 +287,7 @@ function updateDashboard() {
     })
     .catch(error => {
       console.error('Error updating dashboard:', error);
+      setTimeout(updateDashboard, 5000); // Try again in 5 seconds if failed
     });
 }
 
@@ -213,7 +322,7 @@ function startTimer(endTimeStr) {
   if (timerInterval && lastEndTime === endTimeStr) {
     return;
   }
-  
+
   clearTimer();
   if (!endTimeStr) return;
 
@@ -244,7 +353,7 @@ function startTimer(endTimeStr) {
 function updateTimerDisplay(end, totalSeconds, circumference) {
   const now = new Date();
   const diff = Math.floor((end - now) / 1000);
-  
+
   if (diff <= 0) {
     clearTimer();
     if ("{{ user.role }}" === "Trainer" && "{{ user.status }}" === "working") {
@@ -255,10 +364,10 @@ function updateTimerDisplay(end, totalSeconds, circumference) {
 
   const mins = Math.floor(diff / 60);
   const secs = diff % 60;
-  
+
   document.getElementById("countdown").textContent =
     `${String(Math.max(mins, 0)).padStart(2, '0')}:${String(Math.max(secs, 0)).padStart(2, '0')}`;
-  
+
   const progress = document.getElementById("progress-ring");
   if (progress) {
     progress.style.strokeDashoffset = circumference * (1 - diff / totalSeconds);
@@ -495,37 +604,45 @@ function startZone(zone) {
     alert(error.message);
   });
 }
-  
+
 // Function to stop cycle early
 function stopCycleEarly() {
-  if (confirm('Are you sure you want to end your current cycle early?')) {
-    fetch('/complete_cycle_early', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `username={{ username }}`
-    })
+  // Check for mandatory rest period
+  fetch('/get_system_status')
     .then(response => response.json())
     .then(data => {
-      if (data.success) {
-        // For immediate visual feedback before page updates
-        const timerElement = document.querySelector('#countdown');
-        if (timerElement) {
-          timerElement.textContent = 'Ended';
-        }
-        // Clear timer and update dashboard
-        clearTimer();
-        updateDashboard();
-      } else {
-        alert('Failed to end cycle. Please try again.');
+      if (data.mandatory_rest && '{{ user.status }}' === 'resting') {
+        alert('Cannot end mandatory rest cycles early. Please wait for the rest period to complete.');
+        return;
+      }
+
+      // Continue with normal stop cycle process
+      if (confirm('Are you sure you want to end your current cycle early?')) {
+        fetch('/complete_cycle_early', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `username={{ username }}`
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            // Update UI
+            location.reload();
+          } else {
+            alert('Failed to end cycle: ' + (data.error || 'Unknown error'));
+          }
+        })
+        .catch(error => {
+          console.error('Error ending cycle:', error);
+          alert('An error occurred while trying to end the cycle.');
+        });
       }
     })
     .catch(error => {
-      console.error('Error ending cycle:', error);
-      alert('An error occurred while trying to end the cycle.');
+      console.error('Error checking system status:', error);
     });
-  }
 }
-  
+
 // Set up automatic polling for updates
 document.addEventListener('DOMContentLoaded', function() {
   // Get user location
@@ -538,19 +655,19 @@ document.addEventListener('DOMContentLoaded', function() {
       error => console.error('Geolocation error:', error)
     );
   }
-  
+
   // Add event listener for stop button if it exists
   const stopButton = document.getElementById('stop-cycle-button');
   if (stopButton) {
     stopButton.addEventListener('click', stopCycleEarly);
   }
-  
+
   // Initial update
   updateDashboard();
-  
+
   // Set up polling every 2 seconds
   setInterval(updateDashboard, 2000);
-  
+
   // Load saved locations
   loadSavedLocations();
 });

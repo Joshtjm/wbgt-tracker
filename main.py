@@ -7,10 +7,27 @@ from datetime import datetime, timedelta
 import pytz
 import json
 
+# Near the top of your file:
+from flask_cors import CORS
 
 app = Flask(__name__)
 app.secret_key = 'secret_key'
-socketio = SocketIO(app, async_mode='eventlet', ping_timeout=60, ping_interval=25)
+CORS(app)  # Add CORS support
+
+# Initialize SocketIO with cors_allowed_origins="*"
+socketio = SocketIO(app, 
+                   async_mode='eventlet', 
+                   cors_allowed_origins="*",
+                   ping_timeout=60, 
+                   ping_interval=25)
+
+@socketio.on('connect')
+def handle_connect():
+    print("Client connected:", request.sid)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print("Client disconnected:", request.sid)
 
 SG_TZ = pytz.timezone("Asia/Singapore")
 
@@ -48,13 +65,17 @@ def calculate_end(start, minutes):
     return start + timedelta(minutes=minutes)
 
 def save_locations():
-    with open('locations.json', 'w') as f:
-        json.dump(locations, f)
+    def _save():
+        with open('locations.json', 'w') as f:
+            json.dump(locations, f)
+    eventlet.spawn(_save)
 
 def load_locations():
     try:
-        with open('locations.json', 'r') as f:
-            return json.load(f)
+        def _load():
+            with open('locations.json', 'r') as f:
+                return json.load(f)
+        return eventlet.spawn(_load).wait()
     except:
         return {}
 
@@ -90,70 +111,134 @@ def monitor(username):
         return redirect("/")
     return render_template("monitor.html", users=users, username=username, role=users[username]["role"], zones=WBGT_ZONES, system_status=system_status)
 
-@app.route("/toggle_cut_off", methods=["POST"])
+@app.route('/toggle_cut_off', methods=['POST'])
 def toggle_cut_off():
-    username = request.form.get("username")
-    if username not in users or not is_authority(users[username]["role"]):
-        return jsonify({"error": "Unauthorized"}), 401
-
-    now = sg_now()
-    if system_status["cut_off"]:
-        system_status["cut_off"] = False
-        system_status["cut_off_end_time"] = (now + timedelta(minutes=30)).strftime("%H:%M:%S")
-        for user_id, user_data in users.items():
-            if user_data["role"] == "Trainer":
-                user_data["status"] = "resting"
-                user_data["zone"] = None
-                user_data["start_time"] = now.strftime("%H:%M:%S")
-                user_data["end_time"] = (now + timedelta(minutes=30)).strftime("%H:%M:%S")
-    else:
-        system_status["cut_off"] = True
-        system_status["cut_off_end_time"] = None
-        for user_id, user_data in users.items():
-            if user_data["role"] == "Trainer":
-                user_data["status"] = "idle"
-                user_data["zone"] = None
-                user_data["start_time"] = None
-                user_data["end_time"] = None
-
-    return jsonify({"success": True})
-
-@app.route("/reset_logs", methods=["POST"])
-def reset_logs():
-    username = request.form.get("username")
-    if username not in users or not is_authority(users[username]["role"]):
-        return jsonify({"error": "Unauthorized"}), 401
-
-    to_remove = []
-    for user_id, user_data in users.items():
-        if user_data["role"] == "Trainer":
-            to_remove.append(user_id)
-
-    for user_id in to_remove:
-        del users[user_id]
-
-    return jsonify({"success": True})
-
-@app.route("/clear_commands", methods=["POST"])
-def clear_commands():
-    username = request.form.get("username")
-    if username not in users or not is_authority(users[username]["role"]):
-        return jsonify({"error": "Unauthorized"}), 401
-
-    global system_status
-    system_status = {"cut_off": False, "cut_off_end_time": None}
-
-    # Reset all trainers to idle state
-    for user_id, user_data in users.items():
-        if user_data["role"] == "Trainer":
-            user_data.update({
-                "status": "idle",
-                "zone": None,
-                "start_time": None,
-                "end_time": None
+    global system_status, history_log, users
+    previous_state = system_status.get("cut_off", False)
+    system_status["cut_off"] = not previous_state
+    
+    try:
+        # If activating cut-off
+        if system_status["cut_off"]:
+            for username, user in users.items():
+                if user.get('role') == 'Trainer':
+                    # Set all trainers to idle status
+                    previous_status = user.get('status')
+                    previous_zone = user.get('zone')
+                    
+                    # Clear all user status and timing information
+                    user['status'] = 'idle'
+                    user['start_time'] = None
+                    user['end_time'] = None
+                    
+                    # Important: Also clear the zone!
+                    user['zone'] = None
+                    
+                    # Only add to history if they were active
+                    if previous_status in ['working', 'resting']:
+                        # Add to history
+                        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        history_log.append({
+                            'timestamp': timestamp,
+                            'username': username,
+                            'action': 'cut_off_activated',
+                            'zone': previous_zone,
+                            'details': 'Activity stopped by cut-off activation'
+                        })
+            
+            # Reset any mandatory rest period
+            system_status.pop("cut_off_end_time", None)
+            system_status["mandatory_rest"] = False
+                    
+        else:
+            # If deactivating cut-off, set mandatory rest period
+            current_time = datetime.now(SG_TZ) if 'SG_TZ' in globals() else datetime.now()
+            end_time = current_time + timedelta(minutes=30)
+            system_status["cut_off_end_time"] = end_time.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Also set a flag to prevent trainers from ending this rest early
+            system_status["mandatory_rest"] = True
+            
+            # Add to history
+            timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
+            history_log.append({
+                'timestamp': timestamp,
+                'action': 'mandatory_rest',
+                'details': 'Mandatory 30-minute rest period initiated'
             })
+            
+            # Schedule the end of mandatory rest
+            def end_mandatory_rest():
+                system_status["mandatory_rest"] = False
+                system_status.pop("cut_off_end_time", None)
+                try:
+                    socketio.emit('system_status_update', system_status)
+                    print("Mandatory rest period ended")
+                except Exception as e:
+                    print(f"Error emitting update at end of mandatory rest: {e}")
+            
+            # Use eventlet to schedule the end of mandatory rest
+            import eventlet
+            eventlet.spawn_after(30 * 60, end_mandatory_rest)
+        
+        # Debug log
+        print(f"System status after toggle: {system_status}")
+        print(f"User statuses: {[{k: {'status': v.get('status'), 'zone': v.get('zone')}} for k, v in users.items()]}")
+        
+        # Emit system status update to all clients - use try/except to handle connection issues
+        try:
+            socketio.emit('system_status_update', system_status)
+            socketio.emit('user_update', {'users': users})
+            socketio.emit('history_update', {'history': history_log})
+        except Exception as e:
+            print(f"Error emitting updates: {e}")
+        
+        return jsonify({"status": "success", "cut_off": system_status["cut_off"]})
+    
+    except Exception as e:
+        print(f"Error in toggle_cut_off: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-    return jsonify({"success": True})
+@app.route('/clear_commands', methods=['POST'])
+def clear_commands():
+    global users, system_status, history_log
+    
+    # Clear the cut-off status
+    system_status["cut_off"] = False
+    
+    # Clear the mandatory rest period
+    if "cut_off_end_time" in system_status:
+        system_status.pop("cut_off_end_time", None)
+    
+    # Clear the mandatory rest flag
+    system_status["mandatory_rest"] = False
+    
+    # Clear all user activities
+    for username, user in users.items():
+        if user.get('role') == 'Trainer':
+            user['status'] = 'idle'
+            user['start_time'] = None
+            user['end_time'] = None
+            user['work_completed'] = False
+            user['pending_rest'] = False
+    
+    # Add to history log
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    history_log.append({
+        'timestamp': timestamp,
+        'action': 'clear_commands',
+        'details': 'All commands cleared by conducting body'
+    })
+    
+    # Emit updates to all clients
+    try:
+        socketio.emit('system_status_update', system_status)
+        socketio.emit('user_update', {'users': users})
+        socketio.emit('history_update', {'history': history_log})
+    except Exception as e:
+        print(f"Error emitting updates in clear_commands: {e}")
+    
+    return jsonify({"status": "success"})
 
 @app.route("/set_zone", methods=["POST"])
 def set_zone():
@@ -162,14 +247,19 @@ def set_zone():
     zone = request.form.get("zone")
     now = sg_now()
 
-    if system_status["cut_off"] and not is_authority(users[username]["role"]):
+    # Check for cut-off mode
+    if system_status.get("cut_off", False) and not is_authority(users.get(username, {}).get("role", "")):
         return jsonify({"error": "System is in cut-off mode"}), 403
 
-    if system_status["cut_off_end_time"]:
-        cut_off_end = datetime.strptime(system_status["cut_off_end_time"], "%H:%M:%S")
-        cut_off_end = now.replace(hour=cut_off_end.hour, minute=cut_off_end.minute, second=cut_off_end.second)
-        if now < cut_off_end and not is_authority(users[username]["role"]):
-            return jsonify({"error": "Mandatory rest period is still active"}), 403
+    # Safe check for cut_off_end_time
+    if system_status.get("cut_off_end_time"):
+        try:
+            cut_off_end = datetime.strptime(system_status["cut_off_end_time"], "%Y-%m-%d %H:%M:%S")
+            if now < cut_off_end and not is_authority(users.get(username, {}).get("role", "")):
+                return jsonify({"error": "Mandatory rest period is still active"}), 403
+        except ValueError:
+            # If there's an issue with date format, just log it and continue
+            print(f"Error parsing cut_off_end_time: {system_status.get('cut_off_end_time')}")
 
     if username not in users:
         return jsonify({"error": "Unauthorized"}), 401
@@ -196,6 +286,23 @@ def set_zone():
         "end_time": proposed_end.strftime("%H:%M:%S"),
         "location": request.form.get("location", None)
     })
+
+    # Add to history log
+    timestamp = now.strftime('%Y-%m-%d %H:%M:%S')
+    history_log.append({
+        'timestamp': timestamp,
+        'username': username,
+        'action': 'set_zone',
+        'zone': zone,
+        'details': f'Zone set to {zone} for user {target_user}'
+    })
+    
+    # Emit updates
+    try:
+        socketio.emit('user_update', {'users': users})
+        socketio.emit('history_update', {'history': history_log})
+    except Exception as e:
+        print(f"Error emitting updates in set_zone: {e}")
 
     return jsonify({
         "success": True,
@@ -369,9 +476,37 @@ def check_user_cycles(now):
 
     return result
 
+@app.route('/get_system_status', methods=['GET'])
+def get_system_status():
+    return jsonify(system_status)
+
+@app.route('/reset_logs', methods=['POST'])
+def reset_logs():
+    global history_log
+    
+    try:
+        # Clear history log
+        history_log = []
+        
+        # Add a record of the reset action
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        history_log.append({
+            'timestamp': timestamp,
+            'action': 'reset_logs',
+            'details': 'User logs reset by conducting body'
+        })
+        
+        # Emit updates
+        socketio.emit('history_update', {'history': history_log})
+        
+        return jsonify({"status": "success", "message": "Logs reset successfully"})
+    except Exception as e:
+        print(f"Error in reset_logs: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
 @app.route('/complete_cycle_early', methods=['POST'])
 def complete_cycle_early():
-    global history_log 
+    global history_log
     
     username = request.form.get('username')
     if not username:
@@ -379,6 +514,14 @@ def complete_cycle_early():
 
     # Update user status
     if username in users:
+        # Check if this is a mandatory rest cycle
+        is_resting = users[username].get('status') == 'resting'
+        is_mandatory_rest = system_status.get('cut_off_end_time') is not None
+        
+        if is_resting and is_mandatory_rest:
+            return jsonify({'error': 'Cannot end mandatory rest cycles early'}), 403
+            
+        # Proceed with early completion
         users[username]['status'] = 'idle'
 
         # Get the current zone
@@ -390,7 +533,7 @@ def complete_cycle_early():
 
         # Add to activity history
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        history_log.append({  
+        history_log.append({
             'timestamp': timestamp,
             'username': username,
             'action': 'early_completion',
@@ -399,22 +542,22 @@ def complete_cycle_early():
         })
 
         # Broadcast the update
-        socketio.emit('history_update', {'history': history_log}) 
+        socketio.emit('history_update', {'history': history_log})
 
         return jsonify({'success': True})
 
     return jsonify({'error': 'User not found'}), 404
     
-# Instead of this:
 if __name__ == "__main__":
+    # Load locations
     locations = load_locations()
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
-
-# Change to this:
-if __name__ == "__main__":
-    locations = load_locations()
-    # For local development only
+    
+    # Check if running on Render
     import os
-    if os.environ.get('RENDER') != 'true':
+    if os.environ.get('RENDER') == 'true':
+        # In production on Render, don't call socketio.run()
+        # Gunicorn will manage the app
+        pass
+    else:
+        # In local development
         socketio.run(app, host="0.0.0.0", port=5000, debug=True)
-    # When deployed on Render, Gunicorn will call app directly
